@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Google Sign-In</title>
+    <!-- Tailwind CSS for modern aesthetics -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for background and button shadow */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        /* Ensure auth-card is centered */
+        .center-container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 0 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="center-container">
+        <!-- Auth Card (Login View) -->
+        <div id="auth-card" class="bg-white p-8 md:p-10 rounded-xl shadow-2xl w-full max-w-sm mx-auto text-center">
+            <h1 class="text-3xl font-extrabold text-gray-800 mb-6">Secure Login</h1>
+            
+            <!-- The Google Sign-In Button -->
+            <button id="google-login-btn" 
+                    class="w-full flex items-center justify-center space-x-3 px-4 py-3 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-red-300">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.0003 4.80003C14.131 4.80003 15.98 5.51375 17.3486 6.78753L20.4578 3.67831C18.4735 1.83857 15.4278 0.800031 12.0003 0.800031C7.27538 0.800031 3.19985 3.10912 0.826721 6.64366L4.35414 9.42171C5.43486 6.30752 8.48719 4.80003 12.0003 4.80003Z" fill="#EA4335" />
+                    <path d="M11.9998 23.2001C15.4093 23.2001 18.2721 22.0125 20.3703 19.9678L16.8883 17.1583C15.7201 18.8475 13.9113 19.8998 11.9998 19.8998C8.80287 19.8998 6.06456 18.1504 4.82363 15.6393L1.24155 18.4839C3.10237 21.758 7.21408 23.2001 11.9998 23.2001Z" fill="#34A853" />
+                    <path d="M23.1878 12.0001C23.1878 11.3644 23.1319 10.7483 23.0118 10.1481H12.0003V14.5117H18.4903C18.1979 16.0353 17.3888 17.2798 16.2081 18.0988L19.7423 20.9416C21.7228 19.0115 23.1878 16.2917 23.1878 12.0001Z" fill="#4A90E2" />
+                    <path d="M4.82366 15.6394C4.34458 14.4717 4.09038 13.2307 4.09038 12.0001C4.09038 10.7694 4.34458 9.57864 4.82366 8.48394L1.29871 5.6738C0.457833 7.37397 0.000383792 9.43166 0.000383792 12.0001C0.000383792 14.5685 0.457833 16.6262 1.29871 18.3263L4.82366 15.6394Z" fill="#FBBC04" />
+                </svg>
+                <span>Sign in with Google</span>
+            </button>
+        </div>
+
+        <!-- Application Content (Dashboard/Onboarding) -->
+        <div id="app-content" class="hidden">
+            <!-- Content will be injected here by auth-logic.js -->
+        </div>
+    </div>
+
+    <!-- Firebase SDKs are loaded via CDN for global access -->
+    <!-- We don't need these since we are using modular imports -->
+
+    <!-- Load the main JavaScript logic file AS A MODULE -->
+    <script type="module" src="./auth-logic.js"></script>
+</body>
+</html>
