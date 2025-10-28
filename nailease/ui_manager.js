@@ -1,9 +1,4 @@
-// Reusable UI Manager for managing loading states and general UI visibility.
 
-/**
- * Injects a full-screen loading spinner into the body.
- * NOTE: This should be called immediately on page load to prevent FOUC.
- */
 export function renderLoading() {
     const loaderId = 'global-loading-spinner';
     let loader = document.getElementById(loaderId);
