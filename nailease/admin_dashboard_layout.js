@@ -1,21 +1,20 @@
 import { updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { // <-- FIX: REMOVED CRASHING IMPORT
+import { 
     saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,
-    state, setPage, setTab, editDesign // Removed confirmAction, assuming the crash was here.
+    state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline 
 } from './auth-logic.js';
+
+// --- CONSTANTS FOR PAGINATION ---
+const DESIGNS_PER_PAGE = 3; // Fixed at 3 rows
+const PROMOS_PER_PAGE = 5;
+const CREDENTIALS_PER_PAGE = 5;
 
 /**
  * Helper function to create an HTML input field.
- * @param {string} id - Input ID.
- * @param {string} label - Label text.
- * @param {string} type - Input type (text, number, url).
- * @param {string|number} value - Current value.
- * @param {boolean} required - Is required.
- * @param {string} placeholder - Placeholder text.
  */
-const inputField = (id, label, type = 'text', value = '', required = true, placeholder = '') => `
+const inputField = (id, label, type = 'text', value = '', required = true) => `
     <label for="${id}" class="block text-sm font-medium text-gray-700 mt-3">${label}</label>
-    <input type="${type}" id="${id}" name="${id}" ${required ? 'required' : ''} placeholder="${placeholder}"
+    <input type="${type}" id="${id}" name="${id}" ${required ? 'required' : ''} 
         value="${value}"
         class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
 `;
@@ -23,51 +22,101 @@ const inputField = (id, label, type = 'text', value = '', required = true, place
 // --- Content Management Tabs Rendering ---
 
 const renderDesignsTab = () => {
-    const isEditing = state.editingDesign !== null;
+    // This is the data object used to pre-fill the form on the left.
+    const isAddingNew = state.editingDesign === null;
     const design = state.editingDesign || {};
+    
+    // Use paginated designs for the list view
+    const designsToShow = state.designs.slice(
+        (state.designsCurrentPage - 1) * DESIGNS_PER_PAGE,
+        state.designsCurrentPage * DESIGNS_PER_PAGE
+    );
+    const totalPages = Math.ceil(state.designs.length / DESIGNS_PER_PAGE);
 
     const formHtml = `
         <form id="design-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
-            <h3 class="text-xl font-bold text-pink-600 mb-4">${isEditing ? 'Edit Design' : 'Add New Design'}</h3>
+            <h3 class="text-xl font-bold text-pink-600 mb-4">${isAddingNew ? 'Add New Design' : 'Edit Design'}</h3>
             <input type="hidden" id="design-id" value="${design.id || ''}">
             
-            ${inputField('design-title', 'Design Title', 'text', design.title || '', true, 'e.g., French Tip with Gems')}
-            ${inputField('design-price', 'Price (PHP)', 'number', design.price || '', true, 'e.g., 850')}
-            ${inputField('design-imageUrl', 'Image URL (Link to Photo)', 'url', design.imageUrl || '', true, 'e.g., https://placehold.co/400x300/F472B6/fff?text=Design')}
+            ${inputField('design-title', 'Design Title', 'text', design.title || '', true)}
+            ${inputField('design-price', 'Price (PHP)', 'number', design.price || '', true)}
+            ${inputField('design-imageUrl', 'Image URL (Link to Photo)', 'url', design.imageUrl || '', true)}
 
             <div class="flex space-x-4 mt-6">
                 <button type="submit" class="w-full flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-pink-600 hover:bg-pink-700 transition duration-150">
-                    ${isEditing ? 'Save Changes' : 'Add Design'}
+                    ${isAddingNew ? 'Add Design' : 'Save Changes'}
                 </button>
-                ${isEditing ? `
+                ${!isAddingNew ? `
                     <button type="button" onclick="window.setPage('manage', 'designs');" class="px-4 py-3 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition duration-150">
-                        Cancel
+                        Cancel Edit
                     </button>
                 ` : ''}
             </div>
         </form>
     `;
 
-    const listHtml = state.designs.length > 0 ? state.designs.map(d => `
-        <div class="bg-white rounded-xl shadow-sm flex flex-col sm:flex-row items-center p-4 mb-4 border border-gray-100 border-l-4 border-accent-pink">
+    // -------------------------------------------------------------------------------------------------
+    // FIX: Removed the static/hardcoded "Save" button from the list item block.
+    // We rely solely on the dynamically controlled button with id="save-inline-"
+    // -------------------------------------------------------------------------------------------------
+    const listHtml = designsToShow.length > 0 ? designsToShow.map(d => `
+        <form id="design-item-form-${d.id}" class="design-item-form bg-white rounded-xl shadow-sm flex items-start p-4 mb-4 border border-gray-100 border-l-4 ${d.isFeatured ? 'border-purple-600' : 'border-accent-pink'}">
             <img src="${d.imageUrl || 'https://placehold.co/100x75/FCE7F3/DB2777?text=No+Img'}" 
-                 alt="${d.title}" 
-                 onerror="this.onerror=null;this.src='https://placehold.co/100x75/FCE7F3/DB2777?text=Error';"
-                 class="w-full sm:w-24 h-18 object-cover rounded-lg mb-3 sm:mb-0 sm:mr-4 flex-shrink-0">
-            <div class="flex-grow w-full">
-                <p class="text-lg font-semibold text-gray-800 truncate">${d.title}</p>
-                <p class="text-sm text-gray-600">Price: <span class="font-bold text-pink-600">₱${d.price}</span></p>
+                alt="${d.title}" 
+                onerror="this.onerror=null;this.src='https://placehold.co/100x75/FCE7F3/DB2777?text=Error';"
+                class="w-full sm:w-24 h-18 object-cover rounded-lg mr-4 flex-shrink-0">
+            <div class="flex-grow w-full space-y-1">
+                <input type="text" id="design-title-${d.id}" data-initial-value="${d.title}" value="${d.title}" required
+                        oninput="window.toggleSaveButton('${d.id}')"
+                        class="text-lg font-semibold text-gray-800 w-full mb-1 p-0.5 border-b border-gray-200 focus:border-pink-500 focus:ring-0">
+                
+                <div class="flex items-center text-sm text-gray-600 mb-2">
+                    <span class="mr-1">Price:</span> 
+                    <span class="font-bold text-pink-600">₱</span>
+                    <input type="number" id="design-price-${d.id}" data-initial-value="${d.price}" value="${d.price}" required
+                            oninput="window.toggleSaveButton('${d.id}')"
+                            class="font-bold text-pink-600 p-0.5 border-b border-gray-200 focus:border-pink-600 focus:ring-0 w-20">
+                </div>
+                
+                <div class="flex items-center mt-2">
+                    <input id="featured-${d.id}" type="checkbox" ${d.isFeatured ? 'checked' : ''} 
+                            onchange="window.toggleFeaturedDesign('${d.id}', this.checked)"
+                            class="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500">
+                    <label for="featured-${d.id}" class="ml-2 text-sm font-medium text-gray-700">Featured</label>
+                </div>
             </div>
-            <div class="flex space-x-2 mt-3 sm:mt-0 flex-shrink-0">
-                <button onclick="window.editDesign('${d.id}')" class="p-2 rounded-full text-pink-600 hover:bg-pink-100 transition">
-                    <i data-lucide="pencil" class="w-5 h-5"></i>
+            
+            <div class="flex flex-col space-y-2 flex-shrink-0 ml-4">
+                
+                <button type="button" onclick="window.editDesign('${d.id}')" class="px-3 py-1 text-sm font-medium rounded-lg text-pink-600 border border-pink-600 hover:bg-pink-50 transition">
+                    Edit
                 </button>
-                <button onclick="window.deleteDesign('${d.id}')" class="p-2 rounded-full text-red-500 hover:bg-red-100 transition">
-                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                
+                <button type="button" onclick="window.deleteDesign('${d.id}')" class="px-3 py-1 text-sm font-medium rounded-lg text-red-500 border border-red-500 hover:bg-red-50 transition">
+                    Delete
                 </button>
             </div>
-        </div>
+        </form>
     `).join('') : '<p class="text-center text-gray-500 py-8">No designs added yet. Use the form above to add one!</p>';
+    // -------------------------------------------------------------------------------------------------
+    // END FIX
+    // -------------------------------------------------------------------------------------------------
+
+
+    // Pagination Controls
+    const paginationHtml = totalPages > 1 ? `
+        <div class="flex justify-center space-x-2 mt-6">
+            <button onclick="window.setPage('manage', 'designs', ${state.designsCurrentPage - 1})" ${state.designsCurrentPage === 1 ? 'disabled' : ''} 
+                    class="px-4 py-2 text-sm font-medium rounded-lg ${state.designsCurrentPage === 1 ? 'bg-gray-200 text-gray-500' : 'bg-white text-pink-600 hover:bg-pink-50'} transition">
+                Previous
+            </button>
+            <span class="px-4 py-2 text-sm font-medium text-gray-700">Page ${state.designsCurrentPage} of ${totalPages}</span>
+            <button onclick="window.setPage('manage', 'designs', ${state.designsCurrentPage + 1})" ${state.designsCurrentPage === totalPages ? 'disabled' : ''} 
+                    class="px-4 py-2 text-sm font-medium rounded-lg ${state.designsCurrentPage === totalPages ? 'bg-gray-200 text-gray-500' : 'bg-white text-pink-600 hover:bg-pink-50'} transition">
+                Next
+            </button>
+        </div>
+    ` : '';
 
     return `
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -75,41 +124,59 @@ const renderDesignsTab = () => {
             <div class="lg:col-span-2">
                 <h3 class="text-xl font-bold text-gray-800 mb-4">Current Designs (${state.designs.length})</h3>
                 <div class="space-y-4">${listHtml}</div>
+                ${paginationHtml}
             </div>
         </div>
     `;
 };
 
 const renderPromoTab = () => {
-    const activePromo = state.gallery.find(item => item.type === 'promo' && item.isActive);
+    const activePromos = state.gallery.filter(item => item.type === 'promo' && item.isActive);
     const promos = state.gallery.filter(item => item.type === 'promo');
     
+    // Use paginated promos for the 'All Promo Images' list view
+    const promosToShow = promos.slice(
+        (state.promosCurrentPage - 1) * PROMOS_PER_PAGE,
+        state.promosCurrentPage * PROMOS_PER_PAGE
+    );
+    const totalPages = Math.ceil(promos.length / PROMOS_PER_PAGE);
+    
+    // --- Currently Active Promo Logic ---
+    const activePromosPerPage = 1; 
+    const currentActivePage = state.promosActiveCurrentPage || 1; 
+    const currentActivePromoIndex = (currentActivePage - 1) * activePromosPerPage;
+    const currentActivePromo = activePromos[currentActivePromoIndex]; 
+    const totalActivePages = Math.ceil(activePromos.length / activePromosPerPage);
+
+
     const formHtml = `
         <form id="promo-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">Add New Promo Image</h3>
-            ${inputField('promo-imageUrl', 'Image URL (Link to Photo)', 'url', '', true, 'e.g., https://placehold.co/600x200/DB2777/fff?text=Sale+Promo')}
+            ${inputField('promo-imageUrl', 'Image URL (Link to Photo)', 'url', '', true)}
             <button type="submit" class="w-full mt-6 px-4 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-pink-600 hover:bg-pink-700 transition duration-150">
                 Add Promo Image
             </button>
         </form>
     `;
     
-    const listHtml = promos.length > 0 ? promos.map(p => `
+    // List HTML (All Promos)
+    const listHtml = promosToShow.length > 0 ? promosToShow.map(p => `
         <div class="bg-white rounded-xl shadow-sm flex flex-col sm:flex-row items-center p-4 mb-4 border border-gray-100 border-l-4 ${p.isActive ? 'border-green-500' : 'border-gray-300'}">
             <img src="${p.imageUrl || 'https://placehold.co/120x60/FCE7F3/DB2777?text=No+Img'}" 
-                 alt="Promo Image" 
-                 onerror="this.onerror=null;this.src='https://placehold.co/120x60/FCE7F3/DB2777?text=Error';"
-                 class="w-full sm:w-32 h-16 object-cover rounded-lg mb-3 sm:mb-0 sm:mr-4 flex-shrink-0">
+                alt="Promo Image" 
+                onerror="this.onerror=null;this.src='https://placehold.co/120x60/FCE7F3/DB2777?text=Error';"
+                class="w-full sm:w-32 h-16 object-cover rounded-lg mb-3 sm:mb-0 sm:mr-4 flex-shrink-0">
             <div class="flex-grow w-full">
-                <p class="text-sm font-semibold text-gray-800 truncate">${p.imageUrl}</p>
-                <p class="text-xs text-gray-500 mt-1">${p.isActive ? '<span class="text-green-600 font-bold">ACTIVE</span>' : 'Inactive'}</p>
+                <p class="text-sm font-semibold text-gray-800 truncate">Promo ID: ${p.id}</p>
+                
+                <div class="flex items-center mt-2">
+                    <input id="active-promo-${p.id}" type="checkbox" ${p.isActive ? 'checked' : ''} 
+                            onchange="window.toggleActivePromo('${p.id}', this.checked)"
+                            class="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500">
+                    <label for="active-promo-${p.id}" class="ml-2 text-xs font-bold ${p.isActive ? 'text-green-600' : 'text-gray-500'}">${p.isActive ? 'ACTIVE' : 'INACTIVE'}</label>
+                </div>
             </div>
             <div class="flex space-x-2 mt-3 sm:mt-0 flex-shrink-0">
-                <button onclick="window.toggleActivePromo('${p.id}', ${!p.isActive})" 
-                    class="p-2 rounded-full ${p.isActive ? 'text-gray-500 hover:bg-gray-100' : 'text-green-600 hover:bg-green-100'} transition"
-                    title="${p.isActive ? 'Deactivate' : 'Set Active'}">
-                    <i data-lucide="${p.isActive ? 'pause-circle' : 'play-circle'}" class="w-5 h-5"></i>
-                </button>
                 <button onclick="window.deleteGalleryItem('${p.id}')" class="p-2 rounded-full text-red-500 hover:bg-red-100 transition">
                     <i data-lucide="trash-2" class="w-5 h-5"></i>
                 </button>
@@ -117,24 +184,62 @@ const renderPromoTab = () => {
         </div>
     `).join('') : '<p class="text-center text-gray-500 py-8">No promo images added yet.</p>';
     
+    // Pagination Controls for All Promos
+    const allPromosPaginationHtml = totalPages > 1 ? `
+        <div class="flex justify-center space-x-2 mt-6">
+            <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage - 1}, ${currentActivePage})" ${state.promosCurrentPage === 1 ? 'disabled' : ''} 
+                    class="px-4 py-2 text-sm font-medium rounded-lg ${state.promosCurrentPage === 1 ? 'bg-gray-200 text-gray-500' : 'bg-white text-pink-600 hover:bg-pink-50'} transition">
+                Previous
+            </button>
+            <span class="px-4 py-2 text-sm font-medium text-gray-700">Page ${state.promosCurrentPage} of ${totalPages}</span>
+            <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage + 1}, ${currentActivePage})" ${state.promosCurrentPage === totalPages ? 'disabled' : ''} 
+                    class="px-4 py-2 text-sm font-medium rounded-lg ${state.promosCurrentPage === totalPages ? 'bg-gray-200 text-gray-500' : 'bg-white text-pink-600 hover:bg-pink-50'} transition">
+                Next
+            </button>
+        </div>
+    ` : '';
+
+    // NEW PRETTIER PAGINATION CONTROLS FOR ACTIVE PROMOS
+    const activePromosPaginationHtml = totalActivePages > 1 ? `
+        <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
+            <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage}, ${currentActivePage - 1})" ${currentActivePage === 1 ? 'disabled' : ''} 
+                    class="px-3 py-1 text-xs font-semibold rounded-lg text-pink-600 hover:bg-pink-50 transition duration-150 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed border border-pink-100">
+                &larr; Prev
+            </button>
+            
+            <div class="flex items-center space-x-1 text-sm font-bold text-gray-700">
+                <span class="text-pink-600">${currentActivePage}</span> 
+                <span class="text-gray-400">of</span> 
+                <span class="text-gray-500">${totalActivePages}</span>
+            </div>
+            
+            <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage}, ${currentActivePage + 1})" ${currentActivePage === totalActivePages ? 'disabled' : ''} 
+                    class="px-3 py-1 text-xs font-semibold rounded-lg text-pink-600 hover:bg-pink-50 transition duration-150 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed border border-pink-100">
+                Next &rarr;
+            </button>
+        </div>
+    ` : '';
+    
     return `
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-1">
                 ${formHtml}
                 <div class="p-6 bg-white rounded-xl shadow-md border border-gray-100">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">Currently Active</h3>
-                    ${activePromo ? `
-                        <img src="${activePromo.imageUrl}" 
-                             alt="Active Promo" 
-                             onerror="this.onerror=null;this.src='https://placehold.co/600x200/DB2777/fff?text=Error';"
-                             class="w-full h-auto object-cover rounded-lg shadow-lg">
-                        <p class="text-xs text-center text-gray-500 mt-2 truncate">${activePromo.imageUrl}</p>
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Currently Active (${activePromos.length})</h3>
+                    ${currentActivePromo ? `
+                        <img src="${currentActivePromo.imageUrl}" 
+                            alt="Active Promo" 
+                            onerror="this.onerror=null;this.src='https://placehold.co/600x200/DB2777/fff?text=Error';"
+                            class="w-full h-auto object-cover rounded-lg shadow-lg">
+                        <p class="text-xs text-center text-gray-500 mt-2">ID: ${currentActivePromo.id}</p>
+                        ${activePromosPaginationHtml}
                     ` : '<p class="text-center text-gray-500">No promo is currently active.</p>'}
                 </div>
             </div>
             <div class="lg:col-span-2">
                 <h3 class="text-xl font-bold text-gray-800 mb-4">All Promo Images (${promos.length})</h3>
                 <div class="space-y-4">${listHtml}</div>
+                ${allPromosPaginationHtml}
             </div>
         </div>
     `;
@@ -143,11 +248,18 @@ const renderPromoTab = () => {
 const renderCredentialsTab = () => {
     const credentials = state.gallery.filter(item => item.type === 'credential');
     
+    // Use paginated credentials for the list view
+    const credentialsToShow = credentials.slice(
+        (state.credentialsCurrentPage - 1) * CREDENTIALS_PER_PAGE,
+        state.credentialsCurrentPage * CREDENTIALS_PER_PAGE
+    );
+    const totalPages = Math.ceil(credentials.length / CREDENTIALS_PER_PAGE);
+
     const formHtml = `
         <form id="credential-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">Add New Certificate/Credential</h3>
             
-            ${inputField('credential-imageUrl', 'Image URL (Link to Certificate Photo)', 'url', '', true, 'e.g., https://placehold.co/400x400/F472B6/fff?text=Certificate')}
+            ${inputField('credential-imageUrl', 'Image URL (Link to Certificate Photo)', 'url', '', true)}
             
             <button type="submit" class="w-full mt-6 px-4 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-pink-600 hover:bg-pink-700 transition duration-150">
                 Add Certificate
@@ -155,18 +267,33 @@ const renderCredentialsTab = () => {
         </form>
     `;
     
-    const listHtml = credentials.length > 0 ? credentials.map(c => `
+    const listHtml = credentialsToShow.length > 0 ? credentialsToShow.map(c => `
         <div class="bg-white rounded-xl shadow-sm flex flex-col items-center p-4 mb-4 border border-gray-100 border-l-4 border-accent-pink">
             <img src="${c.imageUrl || 'https://placehold.co/200x150/FCE7F3/DB2777?text=No+Img'}" 
-                 alt="Certificate" 
-                 onerror="this.onerror=null;this.src='https://placehold.co/200x150/FCE7F3/DB2777?text=Error';"
-                 class="w-full h-auto object-cover rounded-lg mb-3 shadow-md max-w-xs">
-            <p class="text-xs text-gray-500 mt-2 mb-3 truncate w-full text-center max-w-xs">${c.imageUrl}</p>
+                alt="Certificate" 
+                onerror="this.onerror=null;this.src='https://placehold.co/200x150/FCE7F3/DB2777?text=Error';"
+                class="w-full h-auto object-cover rounded-lg mb-3 shadow-md max-w-xs">
+            <p class="text-xs text-gray-500 mt-2 mb-3 text-center max-w-xs">Credential ID: ${c.id}</p>
             <button onclick="window.deleteGalleryItem('${c.id}')" class="p-2 rounded-full text-red-500 hover:bg-red-100 transition">
                 <i data-lucide="trash-2" class="w-5 h-5"></i>
             </button>
         </div>
     `).join('') : '<p class="text-center text-gray-500 py-8">No credentials added yet.</p>';
+
+    // Pagination Controls
+    const paginationHtml = totalPages > 1 ? `
+        <div class="flex justify-center space-x-2 mt-6">
+            <button onclick="window.setPage('manage', 'credentials', ${state.credentialsCurrentPage - 1})" ${state.credentialsCurrentPage === 1 ? 'disabled' : ''} 
+                    class="px-4 py-2 text-sm font-medium rounded-lg ${state.credentialsCurrentPage === 1 ? 'bg-gray-200 text-gray-500' : 'bg-white text-pink-600 hover:bg-pink-50'} transition">
+                Previous
+            </button>
+            <span class="px-4 py-2 text-sm font-medium text-gray-700">Page ${state.credentialsCurrentPage} of ${totalPages}</span>
+            <button onclick="window.setPage('manage', 'credentials', ${state.credentialsCurrentPage + 1})" ${state.credentialsCurrentPage === totalPages ? 'disabled' : ''} 
+                    class="px-4 py-2 text-sm font-medium rounded-lg ${state.credentialsCurrentPage === totalPages ? 'bg-gray-200 text-gray-500' : 'bg-white text-pink-600 hover:bg-pink-50'} transition">
+                Next
+            </button>
+        </div>
+    ` : '';
     
     return `
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -174,6 +301,7 @@ const renderCredentialsTab = () => {
             <div class="lg:col-span-2">
                 <h3 class="text-xl font-bold text-gray-800 mb-4">Current Certificates (${credentials.length})</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${listHtml}</div>
+                ${paginationHtml}
             </div>
         </div>
     `;
@@ -184,11 +312,15 @@ const renderCredentialsTab = () => {
  * Renders the Content Management view.
  * @param {firebase.User} user - The authenticated user object.
  * @returns {string} The HTML for the Content Management view.
- */
+*/
 export function renderManageView(user) {
     let contentHtml = '';
     let tabTitle = '';
-    const userId = user?.uid || 'N/A';
+    
+    // Check if we are exiting an edit mode by looking at the page state
+    if (state.editingDesign !== null && state.currentTab === 'designs' && state.currentPage !== 'editing') {
+          state.editingDesign = null;
+    }
     
     switch (state.currentTab) {
         case 'designs':
@@ -207,7 +339,6 @@ export function renderManageView(user) {
 
     return `
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
-            <!-- Header with Back Button (Matches image_2f64e8.png) -->
             <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
                 <div class="flex items-center space-x-4">
                     <button onclick="window.setPage('dashboard')" class="flex items-center text-pink-600 hover:text-pink-700 transition">
@@ -216,23 +347,20 @@ export function renderManageView(user) {
                     </button>
                     <h1 class="text-2xl font-extrabold text-gray-800">${tabTitle}</h1>
                 </div>
-                <span class="text-sm text-gray-500 mt-2 sm:mt-0">User ID: ${userId}</span>
             </header>
             
-            <!-- Tabs Navigation -->
             <div class="flex bg-white rounded-xl p-2 shadow-sm border border-gray-100">
-                <button onclick="window.setTab('designs')" class="tab-button flex-1 text-center py-2 px-4 rounded-lg font-medium ${state.currentTab === 'designs' ? 'bg-accent-pink text-white shadow-md' : 'text-gray-600 hover:bg-light-pink'}">
+                <button onclick="window.setTab('designs')" class="tab-button flex-1 text-center py-2 px-4 rounded-lg font-medium ${state.currentTab === 'designs' ? 'bg-pink-600 text-white shadow-md' : 'text-gray-600 hover:bg-pink-50'}">
                     Designs
                 </button>
-                <button onclick="window.setTab('promo')" class="tab-button flex-1 text-center py-2 px-4 rounded-lg font-medium ${state.currentTab === 'promo' ? 'bg-accent-pink text-white shadow-md' : 'text-gray-600 hover:bg-light-pink'}">
+                <button onclick="window.setTab('promo')" class="tab-button flex-1 text-center py-2 px-4 rounded-lg font-medium ${state.currentTab === 'promo' ? 'bg-pink-600 text-white shadow-md' : 'text-gray-600 hover:bg-pink-50'}">
                     Promo
                 </button>
-                <button onclick="window.setTab('credentials')" class="tab-button flex-1 text-center py-2 px-4 rounded-lg font-medium ${state.currentTab === 'credentials' ? 'bg-accent-pink text-white shadow-md' : 'text-gray-600 hover:bg-light-pink'}">
+                <button onclick="window.setTab('credentials')" class="tab-button flex-1 text-center py-2 px-4 rounded-lg font-medium ${state.currentTab === 'credentials' ? 'bg-pink-600 text-white shadow-md' : 'text-gray-600 hover:bg-pink-50'}">
                     Credentials
                 </button>
             </div>
             
-            <!-- Tab Content -->
             <div class="mt-6">
                 ${contentHtml}
             </div>
@@ -242,16 +370,15 @@ export function renderManageView(user) {
 
 /**
  * Renders the Admin Dashboard content into the main container.
- * @param {HTMLElement} container - The DOM element to insert content into (usually 'app-content').
+ * @param {HTMLElement} container - The main container element.
  * @param {firebase.User} user - The authenticated user object.
- * @returns {string} The HTML for the Dashboard view.
- */
+   @returns {string} The HTML for the Dashboard view.
+*/
 export function renderAdminLayout(container, user) {
     const adminName = user.displayName || 'Admin';
     const adminEmail = user.email || 'No Email';
     const avatarLetter = adminName.charAt(0).toUpperCase();
 
-    // The main admin dashboard content (based on your layout)
     const adminHTML = `
         <header class="sticky top-0 bg-white shadow-md z-50">
             <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
@@ -289,7 +416,7 @@ export function renderAdminLayout(container, user) {
 
                         <div class="flex flex-wrap gap-3">
                             <a href="#" class="flex items-center px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-medium rounded-lg transition duration-150 shadow-md shadow-pink-600/20">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.001 0 0120.488 9z"></path></svg>
                                 Dashboard
                             </a>
                             <button id="editProfileBtn" class="flex items-center px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition duration-150">
@@ -310,19 +437,16 @@ export function renderAdminLayout(container, user) {
 
             <div class="w-full px-0 mx-0">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                    <!-- Content Management Card (Redirects via setPage) -->
                     <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition duration-300">
                         <div class="flex justify-between items-center mb-4">
                             <div class="flex items-center">
                                 <span class="text-2xl mr-2 text-pink-600">🎨</span>
                                 <h3 class="text-lg font-semibold text-gray-800">Content Management</h3>
                             </div>
-                            <!-- Primary manage button -->
                             <button id="manageContentBtn" onclick="window.setPage('manage')" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button>
                         </div>
                         <p class="text-sm text-gray-500 mb-4">Manage website content including designs, promos, credentials, and portfolio showcase.</p>
                         <div class="flex flex-wrap gap-2">
-                            <!-- Direct links to tabs -->
                             <button onclick="window.setPage('manage', 'designs')" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Designs</button>
                             <button onclick="window.setPage('manage', 'promo')" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Promos</button>
                             <button onclick="window.setPage('manage', 'credentials')" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Credentials</button>
@@ -395,15 +519,43 @@ export function renderAdminLayout(container, user) {
  * @param {object} user - The authenticated user object.
  */
 export function attachAdminDashboardListeners(logoutUser, user) {
-    const showModal = (id) => document.getElementById(id)?.classList.add('active'); // Use active class
+    const showModal = (id) => document.getElementById(id)?.classList.add('active'); 
     const hideModal = (id) => document.getElementById(id)?.classList.remove('active');
 
-    // --- Core Action Listeners ---
+    window.toggleSaveButton = (id) => {
+        const titleInput = document.getElementById(`design-title-${id}`);
+        const priceInput = document.getElementById(`design-price-${id}`);
+        const saveButton = document.getElementById(`save-inline-${id}`);
+        
+        if (saveButton && titleInput && priceInput) {
+            // Check if input values are different from the initial values stored in data-attributes
+            const isTitleChanged = titleInput.value !== titleInput.dataset.initialValue;
+            const isPriceChanged = priceInput.value !== priceInput.dataset.initialValue;
+            
+            // Disable the button if nothing has changed OR if required fields are empty
+            const isDisabled = !(isTitleChanged || isPriceChanged) || !titleInput.value || !priceInput.value;
+            saveButton.disabled = isDisabled;
+        }
+    };
+
+    window.resetSaveButton = (id) => {
+        const titleInput = document.getElementById(`design-title-${id}`);
+        const priceInput = document.getElementById(`design-price-${id}`);
+        const saveButton = document.getElementById(`save-inline-${id}`);
+        
+        if (titleInput && priceInput && saveButton) {
+            // Update the data-initial-value attributes to the new saved value
+            titleInput.dataset.initialValue = titleInput.value;
+            priceInput.dataset.initialValue = priceInput.value;
+            
+            // Disable the button, as the saved value now matches the initial value
+            saveButton.disabled = true;
+        }
+    };
+
     document.getElementById('logoutBtn')?.addEventListener('click', logoutUser); 
     
-    // The main content management buttons now use the exported setPage function
     document.getElementById('manageContentBtn')?.addEventListener('click', () => setPage('manage')); 
-    // The sub-buttons already use inline onclick="window.setPage(...)"
 
     // Edit Profile Button
     document.getElementById('editProfileBtn')?.addEventListener('click', () => {
@@ -447,11 +599,18 @@ export function attachAdminDashboardListeners(logoutUser, user) {
         if (designForm) {
             designForm.onsubmit = (e) => {
                 e.preventDefault();
+                const form = e.target; 
+                
                 const id = document.getElementById('design-id').value;
                 const title = document.getElementById('design-title').value;
                 const price = parseFloat(document.getElementById('design-price').value);
                 const imageUrl = document.getElementById('design-imageUrl').value;
-                saveDesign(id, { title, price, imageUrl });
+                
+                saveDesign(id, { title, price, imageUrl }); 
+
+                if (!id) {
+                    form.reset(); 
+                }
             };
         }
         
@@ -459,8 +618,10 @@ export function attachAdminDashboardListeners(logoutUser, user) {
         if (promoForm) {
             promoForm.onsubmit = (e) => {
                 e.preventDefault();
+                const form = e.target;
                 const imageUrl = document.getElementById('promo-imageUrl').value;
                 saveGalleryItem('promo', { imageUrl });
+                form.reset();
             };
         }
         
@@ -468,8 +629,10 @@ export function attachAdminDashboardListeners(logoutUser, user) {
         if (credentialForm) {
             credentialForm.onsubmit = (e) => {
                 e.preventDefault();
+                const form = e.target;
                 const imageUrl = document.getElementById('credential-imageUrl').value;
                 saveGalleryItem('credential', { imageUrl });
+                form.reset();
             };
         }
     };
