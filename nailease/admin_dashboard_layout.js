@@ -1,38 +1,70 @@
 import { updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { 
-    saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,
-    state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline 
+import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline 
 } from './auth-logic.js';
 
-// --- CONSTANTS FOR PAGINATION ---
-const DESIGNS_PER_PAGE = 3; // Fixed at 3 rows
+//pagination per page
+const DESIGNS_PER_PAGE = 3; 
 const PROMOS_PER_PAGE = 5;
 const CREDENTIALS_PER_PAGE = 5;
 
-/**
- * Helper function to create an HTML input field.
- */
+//input skeleton
 const inputField = (id, label, type = 'text', value = '', required = true) => `
     <label for="${id}" class="block text-sm font-medium text-gray-700 mt-3">${label}</label>
     <input type="${type}" id="${id}" name="${id}" ${required ? 'required' : ''} 
         value="${value}"
         class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
 `;
+/**
+ * Renders the Admin Dashboard content into the main container.
+ * @param {HTMLElement} container - The main container element.
+ * @param {firebase.User} user - The authenticated user object.
+   @returns {string} The HTML for the Dashboard view.
+*/
 
-// --- Content Management Tabs Rendering ---
+//Admin Profile Editing Modal
+const adminProfileModalHtml = `
+    <div id="adminProfileModal" class="fixed inset-0 z-50 items-center justify-center bg-gray-900 bg-opacity-50 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all duration-300">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Edit Admin Profile</h3>
+            
+            <form id="adminProfileForm" class="space-y-4">
+                
+                <label for="adminNameInput" class="block text-sm font-medium text-gray-700">Display Name</label>
+                <input type="text" id="adminNameInput" required
+                       class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
 
+                <label for="adminEmailInput" class="block text-sm font-medium text-gray-700">Email Address (Read-only)</label>
+                <input type="email" id="adminEmailInput" disabled
+                       class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border bg-gray-100 cursor-not-allowed">
+                       
+                <p id="profileError" class="text-red-500 text-sm hidden"></p>
+
+                <div class="flex justify-end space-x-3 pt-4">
+                    <button type="button" id="cancelAdminModalBtn" class="px-4 py-2 text-sm font-medium rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300 transition">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium rounded-lg text-white bg-pink-600 hover:bg-pink-700 transition">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+`;
+
+//Design Tab
 const renderDesignsTab = () => {
-    // This is the data object used to pre-fill the form on the left.
     const isAddingNew = state.editingDesign === null;
     const design = state.editingDesign || {};
     
-    // Use paginated designs for the list view
+    // pagination logic
     const designsToShow = state.designs.slice(
         (state.designsCurrentPage - 1) * DESIGNS_PER_PAGE,
         state.designsCurrentPage * DESIGNS_PER_PAGE
     );
     const totalPages = Math.ceil(state.designs.length / DESIGNS_PER_PAGE);
 
+    // Design Form
     const formHtml = `
         <form id="design-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">${isAddingNew ? 'Add New Design' : 'Edit Design'}</h3>
@@ -55,10 +87,7 @@ const renderDesignsTab = () => {
         </form>
     `;
 
-    // -------------------------------------------------------------------------------------------------
-    // FIX: Removed the static/hardcoded "Save" button from the list item block.
-    // We rely solely on the dynamically controlled button with id="save-inline-"
-    // -------------------------------------------------------------------------------------------------
+    // Design Display
     const listHtml = designsToShow.length > 0 ? designsToShow.map(d => `
         <form id="design-item-form-${d.id}" class="design-item-form bg-white rounded-xl shadow-sm flex items-start p-4 mb-4 border border-gray-100 border-l-4 ${d.isFeatured ? 'border-purple-600' : 'border-accent-pink'}">
             <img src="${d.imageUrl || 'https://placehold.co/100x75/FCE7F3/DB2777?text=No+Img'}" 
@@ -98,12 +127,8 @@ const renderDesignsTab = () => {
             </div>
         </form>
     `).join('') : '<p class="text-center text-gray-500 py-8">No designs added yet. Use the form above to add one!</p>';
-    // -------------------------------------------------------------------------------------------------
-    // END FIX
-    // -------------------------------------------------------------------------------------------------
 
-
-    // Pagination Controls
+    // Pagination format & design
     const paginationHtml = totalPages > 1 ? `
         <div class="flex justify-center space-x-2 mt-6">
             <button onclick="window.setPage('manage', 'designs', ${state.designsCurrentPage - 1})" ${state.designsCurrentPage === 1 ? 'disabled' : ''} 
@@ -129,26 +154,26 @@ const renderDesignsTab = () => {
         </div>
     `;
 };
-
+//Promo Tab
 const renderPromoTab = () => {
     const activePromos = state.gallery.filter(item => item.type === 'promo' && item.isActive);
     const promos = state.gallery.filter(item => item.type === 'promo');
     
-    // Use paginated promos for the 'All Promo Images' list view
+    // pagination logic -- All displays
     const promosToShow = promos.slice(
         (state.promosCurrentPage - 1) * PROMOS_PER_PAGE,
         state.promosCurrentPage * PROMOS_PER_PAGE
     );
     const totalPages = Math.ceil(promos.length / PROMOS_PER_PAGE);
     
-    // --- Currently Active Promo Logic ---
+    // pagination logic --Currently Active displays
     const activePromosPerPage = 1; 
     const currentActivePage = state.promosActiveCurrentPage || 1; 
     const currentActivePromoIndex = (currentActivePage - 1) * activePromosPerPage;
     const currentActivePromo = activePromos[currentActivePromoIndex]; 
     const totalActivePages = Math.ceil(activePromos.length / activePromosPerPage);
 
-
+    //Promo Form
     const formHtml = `
         <form id="promo-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">Add New Promo Image</h3>
@@ -159,7 +184,7 @@ const renderPromoTab = () => {
         </form>
     `;
     
-    // List HTML (All Promos)
+    // Promo displays
     const listHtml = promosToShow.length > 0 ? promosToShow.map(p => `
         <div class="bg-white rounded-xl shadow-sm flex flex-col sm:flex-row items-center p-4 mb-4 border border-gray-100 border-l-4 ${p.isActive ? 'border-green-500' : 'border-gray-300'}">
             <img src="${p.imageUrl || 'https://placehold.co/120x60/FCE7F3/DB2777?text=No+Img'}" 
@@ -184,7 +209,7 @@ const renderPromoTab = () => {
         </div>
     `).join('') : '<p class="text-center text-gray-500 py-8">No promo images added yet.</p>';
     
-    // Pagination Controls for All Promos
+    // Pagination format & design --All displays
     const allPromosPaginationHtml = totalPages > 1 ? `
         <div class="flex justify-center space-x-2 mt-6">
             <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage - 1}, ${currentActivePage})" ${state.promosCurrentPage === 1 ? 'disabled' : ''} 
@@ -199,7 +224,7 @@ const renderPromoTab = () => {
         </div>
     ` : '';
 
-    // NEW PRETTIER PAGINATION CONTROLS FOR ACTIVE PROMOS
+    //Pagination format & design --Active promos display
     const activePromosPaginationHtml = totalActivePages > 1 ? `
         <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
             <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage}, ${currentActivePage - 1})" ${currentActivePage === 1 ? 'disabled' : ''} 
@@ -244,17 +269,18 @@ const renderPromoTab = () => {
         </div>
     `;
 };
-
+//Credential Tab
 const renderCredentialsTab = () => {
     const credentials = state.gallery.filter(item => item.type === 'credential');
     
-    // Use paginated credentials for the list view
+    // pagination Logic
     const credentialsToShow = credentials.slice(
         (state.credentialsCurrentPage - 1) * CREDENTIALS_PER_PAGE,
         state.credentialsCurrentPage * CREDENTIALS_PER_PAGE
     );
     const totalPages = Math.ceil(credentials.length / CREDENTIALS_PER_PAGE);
 
+    // Credential Form
     const formHtml = `
         <form id="credential-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">Add New Certificate/Credential</h3>
@@ -267,6 +293,7 @@ const renderCredentialsTab = () => {
         </form>
     `;
     
+    // Credential Display
     const listHtml = credentialsToShow.length > 0 ? credentialsToShow.map(c => `
         <div class="bg-white rounded-xl shadow-sm flex flex-col items-center p-4 mb-4 border border-gray-100 border-l-4 border-accent-pink">
             <img src="${c.imageUrl || 'https://placehold.co/200x150/FCE7F3/DB2777?text=No+Img'}" 
@@ -280,7 +307,7 @@ const renderCredentialsTab = () => {
         </div>
     `).join('') : '<p class="text-center text-gray-500 py-8">No credentials added yet.</p>';
 
-    // Pagination Controls
+    //Pagination format & design
     const paginationHtml = totalPages > 1 ? `
         <div class="flex justify-center space-x-2 mt-6">
             <button onclick="window.setPage('manage', 'credentials', ${state.credentialsCurrentPage - 1})" ${state.credentialsCurrentPage === 1 ? 'disabled' : ''} 
@@ -307,17 +334,18 @@ const renderCredentialsTab = () => {
     `;
 };
 
-
 /**
  * Renders the Content Management view.
  * @param {firebase.User} user - The authenticated user object.
  * @returns {string} The HTML for the Content Management view.
 */
+
+//Management Logic & Structure
 export function renderManageView(user) {
     let contentHtml = '';
     let tabTitle = '';
     
-    // Check if we are exiting an edit mode by looking at the page state
+    //this is for the clearing of the editing form
     if (state.editingDesign !== null && state.currentTab === 'designs' && state.currentPage !== 'editing') {
           state.editingDesign = null;
     }
@@ -337,6 +365,7 @@ export function renderManageView(user) {
             break;
     }
 
+    //the structure of the content management
     return `
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
             <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
@@ -368,12 +397,6 @@ export function renderManageView(user) {
     `;
 }
 
-/**
- * Renders the Admin Dashboard content into the main container.
- * @param {HTMLElement} container - The main container element.
- * @param {firebase.User} user - The authenticated user object.
-   @returns {string} The HTML for the Dashboard view.
-*/
 export function renderAdminLayout(container, user) {
     const adminName = user.displayName || 'Admin';
     const adminEmail = user.email || 'No Email';
@@ -507,140 +530,151 @@ export function renderAdminLayout(container, user) {
                 </div>
             </div>
         </div>
+       ${adminProfileModalHtml}
+      
     `;
-
+    
     container.innerHTML = adminHTML;
+    
+    attachAdminDashboardListeners(logoutUser, user, setPage, updateProfile); 
 }
-
-
 /**
  * Attaches all necessary event listeners to the Admin Dashboard elements.
  * @param {function} logoutUser - The logout function from auth_logic.js.
  * @param {object} user - The authenticated user object.
  */
-export function attachAdminDashboardListeners(logoutUser, user) {
-    const showModal = (id) => document.getElementById(id)?.classList.add('active'); 
-    const hideModal = (id) => document.getElementById(id)?.classList.remove('active');
 
-    window.toggleSaveButton = (id) => {
-        const titleInput = document.getElementById(`design-title-${id}`);
-        const priceInput = document.getElementById(`design-price-${id}`);
-        const saveButton = document.getElementById(`save-inline-${id}`);
-        
-        if (saveButton && titleInput && priceInput) {
-            // Check if input values are different from the initial values stored in data-attributes
-            const isTitleChanged = titleInput.value !== titleInput.dataset.initialValue;
-            const isPriceChanged = priceInput.value !== priceInput.dataset.initialValue;
+export function attachAdminDashboardListeners(logoutUser, user, setPage, updateProfile) {
+        // Function to SHOW the modal
+        const showModal = (id) => {const modal = document.getElementById(id);
+            if (modal) {
+                modal.classList.remove('hidden'); // 1. Make it visible
+                modal.classList.add('flex');     // 2. Apply display:flex for centering
+            }
+        };
+
+        // Function to HIDE the modal
+        const hideModal = (id) => {const modal = document.getElementById(id);
+            if (modal) {
+                modal.classList.add('hidden');  // 1. Hide it
+                modal.classList.remove('flex'); // 2. Clean up display:flex
+            }
+        };
+
+        //to guard the save button --unless changes has been made it won't be clickable
+        window.toggleSaveButton = (id) => {
+            const titleInput = document.getElementById(`design-title-${id}`);
+            const priceInput = document.getElementById(`design-price-${id}`);
+            const saveButton = document.getElementById(`save-inline-${id}`);
             
-            // Disable the button if nothing has changed OR if required fields are empty
-            const isDisabled = !(isTitleChanged || isPriceChanged) || !titleInput.value || !priceInput.value;
-            saveButton.disabled = isDisabled;
-        }
-    };
+            if (saveButton && titleInput && priceInput) {
+                const isTitleChanged = titleInput.value !== titleInput.dataset.initialValue;
+                const isPriceChanged = priceInput.value !== priceInput.dataset.initialValue;
+                const isDisabled = !(isTitleChanged || isPriceChanged) || !titleInput.value || !priceInput.value;
+                saveButton.disabled = isDisabled;
+            }
+        };
 
-    window.resetSaveButton = (id) => {
-        const titleInput = document.getElementById(`design-title-${id}`);
-        const priceInput = document.getElementById(`design-price-${id}`);
-        const saveButton = document.getElementById(`save-inline-${id}`);
-        
-        if (titleInput && priceInput && saveButton) {
-            // Update the data-initial-value attributes to the new saved value
-            titleInput.dataset.initialValue = titleInput.value;
-            priceInput.dataset.initialValue = priceInput.value;
+        //to set the new value as initial value
+        window.resetSaveButton = (id) => {
+            const titleInput = document.getElementById(`design-title-${id}`);
+            const priceInput = document.getElementById(`design-price-${id}`);
+            const saveButton = document.getElementById(`save-inline-${id}`);
             
-            // Disable the button, as the saved value now matches the initial value
-            saveButton.disabled = true;
-        }
-    };
+            if (titleInput && priceInput && saveButton) {
+                titleInput.dataset.initialValue = titleInput.value;
+                priceInput.dataset.initialValue = priceInput.value;
+                saveButton.disabled = true;
+            }
+        };
 
-    document.getElementById('logoutBtn')?.addEventListener('click', logoutUser); 
-    
-    document.getElementById('manageContentBtn')?.addEventListener('click', () => setPage('manage')); 
+        document.getElementById('logoutBtn')?.addEventListener('click', logoutUser); 
+        document.getElementById('manageContentBtn')?.addEventListener('click', () => setPage('manage')); 
 
-    // Edit Profile Button
-    document.getElementById('editProfileBtn')?.addEventListener('click', () => {
-        const adminProfileModal = document.getElementById('adminProfileModal');
-        if (adminProfileModal) {
-            // Update modal inputs before showing
-            document.getElementById('adminNameInput').value = user?.displayName || '';
-            document.getElementById('adminEmailInput').value = user?.email || '';
-            showModal('adminProfileModal');
-        }
-    });
+        // Edit Profile Button
+        document.getElementById('editProfileBtn')?.addEventListener('click', () => {
+            const adminProfileModal = document.getElementById('adminProfileModal');
+            if (adminProfileModal) {
+                // This will now REMOVE the 'hidden' class, making the modal visible.
+                showModal('adminProfileModal'); 
+            }
+        });
 
-    // Modal Close Buttons
-    document.getElementById('hideAdminModalBtn')?.addEventListener('click', () => { hideModal('adminProfileModal'); });
-    document.getElementById('cancelAdminModalBtn')?.addEventListener('click', () => { hideModal('adminProfileModal'); });
+        // Modal Close Handlers    
+        document.getElementById('cancelAdminModalBtn')?.addEventListener('click', () => { hideModal('adminProfileModal'); });
+        document.getElementById('adminProfileModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'adminProfileModal') { hideModal('adminProfileModal'); }
+        });
 
-    // Modal Overlay Close 
-    document.getElementById('adminProfileModal')?.addEventListener('click', (e) => {
-        if (e.target.id === 'adminProfileModal') { hideModal('adminProfileModal'); }
-    });
-    
-    // Admin Profile Form Submission (Uses Firebase updateProfile logic)
-    document.getElementById('adminProfileForm')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newName = document.getElementById('adminNameInput').value;
         
-        try {
-            await updateProfile(user, { displayName: newName });
-            window.renderApp(); // Global function to re-render the whole app
-            hideModal('adminProfileModal');
-        } catch (error) {
-            console.error("Failed to update profile:", error);
-            // Instead of alert, you'd show a message in the modal:
-            // document.getElementById('profileError').textContent = "Update failed."; 
-        }
-    });
-    
-    // Forms for Content Management (Attached on the 'manage' page only)
-    const attachContentFormListeners = () => {
-        const designForm = document.getElementById('design-form');
-        if (designForm) {
-            designForm.onsubmit = (e) => {
-                e.preventDefault();
-                const form = e.target; 
-                
-                const id = document.getElementById('design-id').value;
-                const title = document.getElementById('design-title').value;
-                const price = parseFloat(document.getElementById('design-price').value);
-                const imageUrl = document.getElementById('design-imageUrl').value;
-                
-                saveDesign(id, { title, price, imageUrl }); 
-
-                if (!id) {
-                    form.reset(); 
-                }
-            };
-        }
+        // Admin Profile Form Submission (Uses Firebase updateProfile logic)
+        document.getElementById('adminProfileForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newName = document.getElementById('adminNameInput').value;
+            const profileError = document.getElementById('profileError');
+            profileError.textContent = ''; // Clear previous errors
+            profileError.classList.add('hidden');
+            
+            try {
+                // Assumes 'updateProfile' is the imported Firebase function
+                await updateProfile(user, { displayName: newName }); 
+                window.renderApp(); // Re-render to show the new name on the dashboard
+                hideModal('adminProfileModal');
+            } catch (error) {
+                console.error("Failed to update profile:", error);
+                profileError.textContent = "Update failed: " + error.message;
+                profileError.classList.remove('hidden');
+            }
+        });
         
-        const promoForm = document.getElementById('promo-form');
-        if (promoForm) {
-            promoForm.onsubmit = (e) => {
-                e.preventDefault();
-                const form = e.target;
-                const imageUrl = document.getElementById('promo-imageUrl').value;
-                saveGalleryItem('promo', { imageUrl });
-                form.reset();
-            };
-        }
-        
-        const credentialForm = document.getElementById('credential-form');
-        if (credentialForm) {
-            credentialForm.onsubmit = (e) => {
-                e.preventDefault();
-                const form = e.target;
-                const imageUrl = document.getElementById('credential-imageUrl').value;
-                saveGalleryItem('credential', { imageUrl });
-                form.reset();
-            };
-        }
-    };
-    
-    // Export the form attachment function for use after rendering the manage view
-    window.attachContentFormListeners = attachContentFormListeners;
+        // Forms for Content Management (Attached on the 'manage' page only)
+        const attachContentFormListeners = () => {
+            const designForm = document.getElementById('design-form');
+            if (designForm) {
+                designForm.onsubmit = (e) => {
+                    e.preventDefault();
+                    const form = e.target; 
+                    
+                    const id = document.getElementById('design-id').value;
+                    const title = document.getElementById('design-title').value;
+                    const price = parseFloat(document.getElementById('design-price').value);
+                    const imageUrl = document.getElementById('design-imageUrl').value;
+                    
+                    saveDesign(id, { title, price, imageUrl }); 
 
-    // Placeholder console logs for other buttons
-    document.getElementById('manageReviewBtn')?.addEventListener('click', () => console.log('Review Management Opened'));
-    document.getElementById('manageAppointmentsBtn')?.addEventListener('click', () => console.log('Appointments Management Opened'));
+                    if (!id) {
+                        form.reset(); 
+                    }
+                };
+            }
+            
+            const promoForm = document.getElementById('promo-form');
+            if (promoForm) {
+                promoForm.onsubmit = (e) => {
+                    e.preventDefault();
+                    const form = e.target;
+                    const imageUrl = document.getElementById('promo-imageUrl').value;
+                    saveGalleryItem('promo', { imageUrl });
+                    form.reset();
+                };
+            }
+            
+            const credentialForm = document.getElementById('credential-form');
+            if (credentialForm) {
+                credentialForm.onsubmit = (e) => {
+                    e.preventDefault();
+                    const form = e.target;
+                    const imageUrl = document.getElementById('credential-imageUrl').value;
+                    saveGalleryItem('credential', { imageUrl });
+                    form.reset();
+                };
+            }
+        };
+        
+        // Export the form attachment function for use after rendering the manage view
+        window.attachContentFormListeners = attachContentFormListeners;
+
+        // Placeholder console logs for other buttons
+        document.getElementById('manageReviewBtn')?.addEventListener('click', () => console.log('Review Management Opened'));
+        document.getElementById('manageAppointmentsBtn')?.addEventListener('click', () => console.log('Appointments Management Opened'));
 }

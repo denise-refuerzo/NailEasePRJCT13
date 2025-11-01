@@ -1,5 +1,3 @@
-
-
 import { clientDashboardTemplate } from "./client_dashboard_template.js";
 
 /**

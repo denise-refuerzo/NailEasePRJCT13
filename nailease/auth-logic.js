@@ -1,10 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { 
-    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"; 
-import { 
-    getFirestore, doc, getDoc, setDoc, collection, serverTimestamp, 
-    addDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+import { getFirestore, doc, getDoc, setDoc, collection, serverTimestamp,addDoc, deleteDoc, getDocs, query, orderBy, writeBatch
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"; 
 
 // Import the layout renderer and listener attachment function
@@ -13,10 +10,8 @@ import { renderAdminLayout, attachAdminDashboardListeners, renderManageView } fr
 import { renderLoading, hideLoading, showContainer, hideContainer } from "./ui_manager.js";
 
 
-// --- Configuration and Initialization ---
-
+// firebase config and init
 const firebaseConfig = {
-    // Your actual configuration
     apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
     authDomain: "nailease25.firebaseapp.com",
     projectId: "nailease25",
@@ -26,8 +21,8 @@ const firebaseConfig = {
     measurementId: "G-RE42B3FVRJ"
 };
 
-const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; 
-const APP_ID = 'nailease25-iapt'; 
+const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; //admin id
+const APP_ID = 'nailease25-iapt'; // firebase project id
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app); 
@@ -36,7 +31,7 @@ const db = getFirestore(app);
 const SEND_OTP_URL = 'https://sendphoneforverification-2ldy5wz35q-uc.a.run.app/sendPhoneForVerification';
 const VERIFY_OTP_URL = 'https://us-central1-nailease25.cloudfunctions.net/verifyOtp'; 
 
-
+//paths in the firestore
 const DESIGNS_COLLECTION = `content/${APP_ID}/designs`;
 const GALLERY_COLLECTION = `content/${APP_ID}/gallery`;
 
@@ -571,6 +566,7 @@ function renderApp(user, clientData) {
         }
     }
 
+    window.renderApp = renderApp;
 /**
  * Checks the user's Auth state, queries Firestore for their role/data, and calls the appropriate renderer.
  * @param {firebase.User} user - The authenticated Firebase user object.
