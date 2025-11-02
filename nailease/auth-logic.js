@@ -151,8 +151,11 @@ async function logoutUser() {
     try {
         await signOut(auth);
         console.log("User signed out successfully.");
+        window.location.href = 'homepage.html'; 
+
     } catch (error) {
         console.error("Logout error:", error);
+        window.location.href = 'homepage.html';
     }
 }
 
@@ -461,14 +464,12 @@ export function editDesign(id) {
  * @param {object} user - The current Firebase user.
  */
 function attachOnboardingListeners(user) {
-    // 1. Get dynamically created elements
     const onboardNameInput = document.getElementById('onboardName');
     const onboardPhoneInput = document.getElementById('onboardPhone');
     const onboardOtpCodeInput = document.getElementById('onboardOtpCode');
     const onboardSendBtn = document.getElementById('onboardSendOtp');
     const onboardVerifyBtn = document.getElementById('onboardVerifyOtp');
 
-    // 2. Attach Handlers
     document.getElementById('logoutBtn').addEventListener('click', logoutUser); // Global Logout
 
      // Send OTP Handler
@@ -495,12 +496,12 @@ function attachOnboardingListeners(user) {
         }
      });
 }
+
 /**
  * Renders the content based on the user's role and onboarding status.
  * @param {firebase.User} user - The authenticated Firebase user object.
  * @param {object} clientData - The existing client data from Firestore, or null.
  */
-
 function renderApp(user, clientData) {
     const appContent = document.getElementById('app-content'); 
     const isAdmin = user && user.uid === ADMIN_UID;
@@ -511,7 +512,6 @@ function renderApp(user, clientData) {
     showContainer('app-content'); 
 
     if (isAdmin) {
-        // NOTE: The renderManageView relies on state.editingDesign
         if (state.currentPage === 'manage' || state.currentPage === 'editing') { 
             appContent.innerHTML = renderManageView(user);
             if (window.attachContentFormListeners) {
@@ -526,10 +526,8 @@ function renderApp(user, clientData) {
     } else {
         // CLIENT FLOW
         if (isClientOnboarded) {
-            // RENDER MAIN CLIENT DASHBOARD
            renderClientLayout(document.getElementById('app-content'), user, clientData);
             
-           // CRITICAL: Attach event listeners for the dashboard buttons
             attachClientDashboardListeners(user, clientData, logoutUser, sendPhoneForVerification, verifyOTPAndSave, updateClientName);
 
     } else {
@@ -560,25 +558,53 @@ function renderApp(user, clientData) {
                         <button id="logoutBtn" class="mt-4 w-full text-gray-500 hover:text-gray-700">Logout</button>
                     </div>
             `;
-        // Attach listeners for the dynamically loaded Onboarding content
                     attachOnboardingListeners(user); 
             }
         }
     }
 
-    window.renderApp = renderApp;
+window.renderApp = renderApp;
 /**
  * Checks the user's Auth state, queries Firestore for their role/data, and calls the appropriate renderer.
  * @param {firebase.User} user - The authenticated Firebase user object.
  */
 
-// CRITICAL FUNCTION: Must be defined before the listener attempts to call it.
+export async function fetchPublicContent() {
+    // This is a simplified version of fetchContent for public use
+    try {
+        const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
+        const gallerySnapshot = await getDocs(galleryQuery);
+        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const designsQuery = query(collection(db, DESIGNS_COLLECTION), orderBy('timestamp', 'desc'));
+        const designsSnapshot = await getDocs(designsQuery);
+        state.designs = designsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Error fetching public content:", error);
+    }
+}
+
 async function checkAndSetRole(user) {
+    const isLoginPage = window.location.pathname.endsWith('/index.html') || window.location.pathname.endsWith('/'); 
+    const isHomePage = window.location.pathname.endsWith('/homepage.html');
     try {
         if (!user) {
-            showContainer('auth-card'); 
-            hideContainer('app-content'); 
+            // CASE 1: NOT LOGGED IN
+
+            if (isLoginPage) {
+                showContainer('auth-card'); 
+                hideContainer('app-content'); 
+                return; 
+            } else if (!isHomePage) {
+                window.location.href = 'index.html'; 
+                return;
+            }
             return; 
+        }      
+
+        if (isLoginPage) {
+                window.location.href = 'homepage.html'; 
+                return; 
         }
 
         let clientData = null;
@@ -632,22 +658,32 @@ function attachGlobalFunctions() {
 window.checkAndSetRole = checkAndSetRole; 
 attachGlobalFunctions();
 
-// --- Main Execution Flow (Final Block) ---
-window.addEventListener('DOMContentLoaded', () => {
-    // 1. CRITICAL: Start the loading spinner immediately
-    renderLoading(); 
+export function startAuthFlow() {
+    window.addEventListener('DOMContentLoaded', () => {
+        // 1. CRITICAL: Start the loading spinner immediately
+        renderLoading(); 
 
-    const loginButton = document.getElementById('google-login-btn');
+        // Only run the auth listener if we are NOT on the public home page
+        const isHomePage = window.location.pathname.endsWith('/homepage.html');
 
-    if (loginButton) {
-        loginButton.addEventListener('click', () => {
-            const provider = new GoogleAuthProvider();
-            signInWithPopup(auth, provider).catch(error => {
-                console.error("Google Sign-In Error:", error.code, error.message);
-                alert(`Login Failed: ${error.message}`);
+        if (!isHomePage) {
+            // This ensures checkAndSetRole runs only on index.html (login) or restricted pages.
+            onAuthStateChanged(auth, checkAndSetRole); 
+        }
+
+        const loginButton = document.getElementById('google-login-btn');
+
+        if (loginButton) {
+            loginButton.addEventListener('click', () => {
+                const provider = new GoogleAuthProvider();
+                signInWithPopup(auth, provider).catch(error => {
+                    console.error("Google Sign-In Error:", error.code, error.message);
+                    alert(`Login Failed: ${error.message}`);
+                });
             });
-        });
-    }
+        }
 
-    onAuthStateChanged(auth, checkAndSetRole); 
-});
+    });
+}
+
+onAuthStateChanged(auth, checkAndSetRole); 

@@ -15,7 +15,6 @@
             align-items: center;
             min-height: 100vh;
         }
-        /* Ensure auth-card is centered */
         .center-container {
             width: 100%;
             max-width: 1000px;
@@ -41,10 +40,13 @@
         </div>
 
         <div id="app-content" class="hidden">
-            <!-- Content will be injected here by auth-logic.js -->
         </div>
     </div>
 
     <script type="module" src="./auth-logic.js"></script>
+    <script type="module">
+        import { startAuthFlow } from './auth-logic.js';
+        startAuthFlow();
+    </script>
 </body>
 </html>
