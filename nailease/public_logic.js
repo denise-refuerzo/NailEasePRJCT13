@@ -1,5 +1,7 @@
 import { state } from './auth-logic.js'; 
 import { renderPublicPage, attachPublicPageListeners } from './public_layout.js';
+import { renderLoading, hideLoading } from './ui_manager.js';
+
 
 const PUBLIC_PAGE_CONTAINER_ID = 'app-content';
 
@@ -21,27 +23,13 @@ function renderPublicPageContent() {
     }
 
     //Render the main page structure
+    renderLoading();
+    hideLoading();
     container.innerHTML = renderPublicPage({ activePromos, credentials, topPicks });
         //Attach listeners
     attachPublicPageListeners();
 
     console.log("Public page rendered successfully with loaded data.");
 }
-
-function safeInitPublicPage() {
-    // Check for the critical data needed for rendering
-    if (!state || !state.gallery || !state.designs) {
-        console.warn("Public page data is missing. Retrying initialization in 100ms...");
-        
-        // Wait 100ms and call itself again
-        setTimeout(safeInitPublicPage, 100);
-        return;
-    }
-    
-    // Data is ready, perform the final rendering
-    renderPublicPageContent();
-}
-
-document.addEventListener('DOMContentLoaded', safeInitPublicPage);
 
 export { renderPublicPageContent };

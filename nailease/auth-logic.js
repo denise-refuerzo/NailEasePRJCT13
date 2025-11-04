@@ -603,8 +603,8 @@ async function checkAndSetRole(user) {
         }      
 
         if (isLoginPage) {
-                window.location.href = 'homepage.html'; 
-                return; 
+                // window.location.href = 'homepage.html'; 
+                // return; 
         }
 
         let clientData = null;
@@ -682,6 +682,22 @@ export function startAuthFlow() {
                 });
             });
         }
+        onAuthStateChanged(auth, (user) => {
+                        const accountLink = document.getElementById('account-link');
+                        const loginBtn = document.getElementById('google-login-btn');
+            
+                        if (accountLink && loginBtn) {
+                            if (user) {
+                                // User is logged in: Show "My Account" link, Hide "Sign In" button
+                                accountLink.classList.remove('hidden');
+                                loginBtn.classList.add('hidden');
+                            } else {
+                                // User is NOT logged in: Hide "My Account" link, Show "Sign In" button
+                                accountLink.classList.add('hidden');
+                                loginBtn.classList.remove('hidden');
+                            }
+                        }
+        });
 
     });
 }

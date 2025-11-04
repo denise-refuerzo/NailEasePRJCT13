@@ -1,18 +1,18 @@
 // client_dashboard_template.js
 
 export const clientDashboardTemplate = `
-    <header class="sticky top-0 bg-white shadow-md z-50">
-        <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
-            
-            <div class="hidden sm:flex space-x-4 items-center">
-                <a href="/home.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
-                <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
-                <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Log Out</button>
+        <header class="sticky top-0 bg-white shadow-lg z-50">
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                    <nav class="flex space-x-4 items-center">
+                        <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
+                        <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
+                        <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Book</a>
+                        <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
+                        <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Log Out</button>
+                    </nav>
             </div>
-            
-        </div>
-    </header>
+        </header>
     
     <div class="account-container max-w-7xl mx-auto p-4 md:p-8">
         

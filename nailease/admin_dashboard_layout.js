@@ -5,7 +5,7 @@ import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleAct
 //pagination per page
 const DESIGNS_PER_PAGE = 3; 
 const PROMOS_PER_PAGE = 5;
-const CREDENTIALS_PER_PAGE = 5;
+const CREDENTIALS_PER_PAGE = 2;
 
 //input skeleton
 const inputField = (id, label, type = 'text', value = '', required = true) => `
@@ -403,18 +403,22 @@ export function renderAdminLayout(container, user) {
     const avatarLetter = adminName.charAt(0).toUpperCase();
 
     const adminHTML = `
-        <header class="sticky top-0 bg-white shadow-md z-50">
-            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                <a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
-                
-                <div class="hidden sm:flex space-x-4 items-center">
-                    <a href="/home.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
-                    <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
-                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
-                    <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
-                </div>
-            </div>
-        </header>
+       <header class="sticky top-0 bg-white shadow-md z-50">
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                
+                <div class="hidden sm:flex space-x-4 items-center">
+                                        <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
+                    
+                    <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
+                    
+                                        <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
+                    
+                    <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
+                </div>
+            </div>
+        </header>
 
         <div class="text-center py-8 bg-white border-b border-gray-100">
             <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800">Admin Dashboard</h1>
