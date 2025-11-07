@@ -21,12 +21,11 @@ const firebaseConfig = {
     measurementId: "G-RE42B3FVRJ"
 };
 
-const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; //admin id
-const APP_ID = 'nailease25-iapt'; // firebase project id
-
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app); 
-const db = getFirestore(app);
+export const auth = getAuth(app); 
+export const db = getFirestore(app); // <-- EXPORT DB
+export const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; //admin id
+export const APP_ID = 'nailease25-iapt'; // firebase project id
 
 const SEND_OTP_URL = 'https://sendphoneforverification-2ldy5wz35q-uc.a.run.app/sendPhoneForVerification';
 const VERIFY_OTP_URL = 'https://us-central1-nailease25.cloudfunctions.net/verifyOtp'; 
@@ -36,7 +35,7 @@ const DESIGNS_COLLECTION = `content/${APP_ID}/designs`;
 const GALLERY_COLLECTION = `content/${APP_ID}/gallery`;
 
 
-function getClientDocRef(uid) {
+export function getClientDocRef(uid) {
     const clientsCollectionPath = `/artifacts/${APP_ID}/users/${uid}/clients`;
     return doc(collection(db, clientsCollectionPath), uid);
 }

@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCAC NailEase - Book Your Design</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        
+        // Auto-fill user name when signed in
+        onAuthStateChanged(auth, (user) => {
+            if (user && user.displayName) {
+                const fullNameInput = document.getElementById('fullName');
+                if (fullNameInput && !fullNameInput.value) {
+                    fullNameInput.value = user.displayName;
+                }
+                const emailInput = document.getElementById('email');
+                if (emailInput && user.email && !emailInput.value) {
+                    emailInput.value = user.email;
+                }
+            }
+        });
+        
+        window.auth = auth;
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcf4f8;
+        }
+        .step-content {
+            display: none;
+        }
+        .step-content.active {
+            display: block;
+            animation: fadeInUp 0.5s ease;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .calendar-day {
+            aspect-ratio: 1.2;
+            min-height: 65px;
+        }
+        .calendar-day.header {
+            background: linear-gradient(135deg, #ec4899, #f472b6);
+            color: white;
+            cursor: default;
+            min-height: 50px;
+        }
+        .calendar-day.disabled {
+            background: #f8f9fa;
+            color: #bbb;
+            cursor: not-allowed;
+        }
+        .calendar-day.other-month {
+            background: #f8f9fa;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .calendar-day.unavailable {
+            background: linear-gradient(135deg, #ffebee, #ffcdd2);
+            color: #d32f2f;
+            cursor: not-allowed;
+            position: relative;
+        }
+        .calendar-day.unavailable::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 20%;
+            right: 20%;
+            height: 2px;
+            background: #d32f2f;
+            transform: translateY(-50%);
+        }
+        .calendar-day.unavailable::after {
+            content: 'Booked';
+            position: absolute;
+            bottom: 5px;
+            left: 0;
+            right: 0;
+            font-size: 0.7rem;
+            text-align: center;
+            color: #d32f2f;
+        }
+        .calendar-day.selected {
+            background: linear-gradient(135deg, #ec4899, #f472b6);
+            color: white;
+            transform: scale(0.98);
+        }
+        .calendar-day.selected::after {
+            content: '✓';
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .calendar-day.today {
+            border: 2px solid #ffa500;
+        }
+        .calendar-day.today::before {
+            content: 'Today';
+            position: absolute;
+            top: 5px;
+            left: 0;
+            right: 0;
+            font-size: 0.7rem;
+            text-align: center;
+            color: #ffa500;
+            font-weight: bold;
+        }
+        .time-slot.unavailable {
+            background: #f5f5f5;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .time-slot.selected {
+            background: #ec4899;
+            color: white;
+            border-color: #ec4899;
+        }
+        .payment-method.selected {
+            border-color: #ec4899;
+            background: rgba(236, 72, 153, 0.1);
+        }
+        .error-message {
+            display: none;
+        }
+        .error-message.show {
+            display: block;
+        }
+        .receipt-upload.dragover {
+            background: rgba(236, 72, 153, 0.2);
+            border-color: #ec4899;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-pink-50/50">
+        <!-- Header -->
+        <header class="sticky top-0 bg-white shadow-lg z-50">
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                
+                <nav class="flex space-x-4 items-center">
+                    <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
+                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
+                    <a href="book.html" class="text-pink-600 font-medium">Book</a>
+                    <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
+                    <button id="account-link" class="flex items-center text-pink-600 hover:text-pink-700 transition duration-150 p-2 rounded-full hover:bg-pink-50">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <main class="max-w-4xl mx-auto p-6 md:p-10 pb-24">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-pink-600 text-center mb-8">Book Your Design</h1>
+
+            <!-- Progress Bar -->
+            <div class="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-6">
+                <div class="flex justify-between relative mb-6">
+                    <div class="flex-1 text-center relative z-10">
+                        <div class="w-12 h-12 rounded-full bg-pink-500 text-white flex items-center justify-center mx-auto mb-2 font-bold transition-all" id="step1Circle">1</div>
+                        <div class="text-sm font-bold text-pink-600">Design</div>
+                    </div>
+                    <div class="flex-1 text-center relative z-10">
+                        <div class="w-12 h-12 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center mx-auto mb-2 font-bold transition-all" id="step2Circle">2</div>
+                        <div class="text-sm font-bold text-gray-600">Date</div>
+                    </div>
+                    <div class="flex-1 text-center relative z-10">
+                        <div class="w-12 h-12 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center mx-auto mb-2 font-bold transition-all" id="step3Circle">3</div>
+                        <div class="text-sm font-bold text-gray-600">Time</div>
+                    </div>
+                    <div class="flex-1 text-center relative z-10">
+                        <div class="w-12 h-12 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center mx-auto mb-2 font-bold transition-all" id="step4Circle">4</div>
+                        <div class="text-sm font-bold text-gray-600">Details</div>
+                    </div>
+                    <div class="flex-1 text-center relative z-10">
+                        <div class="w-12 h-12 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center mx-auto mb-2 font-bold transition-all" id="step5Circle">5</div>
+                        <div class="text-sm font-bold text-gray-600">Payment</div>
+                    </div>
+                    <div class="absolute top-6 left-0 right-0 h-1 bg-gray-200 -z-0">
+                        <div class="h-full bg-pink-500 transition-all duration-500 rounded" id="progressFill" style="width: 20%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 1: Design Selection -->
+            <div class="step-content active bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step1">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Selected Design</h2>
+                <div class="border-3 border-pink-500 rounded-2xl p-6 text-center bg-gradient-to-br from-pink-50 to-pink-100">
+                    <div class="w-full h-40 bg-gray-100 rounded-xl flex items-center justify-center text-lg font-semibold text-gray-600 mb-4" id="selectedDesignImage">Clean & Modern</div>
+                    <div>
+                        <h3 class="text-xl font-bold text-pink-600 mb-2" id="selectedDesignName">Clean & Modern</h3>
+                        <div class="text-3xl font-bold text-green-600 mb-2" id="selectedDesignPrice">₱299</div>
+                        <p class="text-gray-600 mb-4" id="selectedDesignDescription">Minimalist logo design with modern aesthetics</p>
+                        <button class="bg-pink-50 border-2 border-pink-500 text-pink-600 px-6 py-2 rounded-full font-bold hover:bg-pink-500 hover:text-white transition-all" onclick="changeDesign()">Change Design</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Calendar -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step2">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Choose Your Date</h2>
+                <div class="max-w-2xl mx-auto">
+                    <div class="flex justify-between items-center mb-6 bg-gradient-to-r from-pink-500 to-pink-400 text-white p-5 rounded-2xl shadow-lg">
+                        <button class="bg-white/20 hover:bg-white/30 rounded-full w-12 h-12 flex items-center justify-center text-2xl transition-all" id="prevMonth">‹</button>
+                        <div class="text-xl font-bold" id="monthYear">December 2024</div>
+                        <button class="bg-white/20 hover:bg-white/30 rounded-full w-12 h-12 flex items-center justify-center text-2xl transition-all" id="nextMonth">›</button>
+                    </div>
+                    <div class="grid grid-cols-7 gap-1 bg-gray-200 rounded-2xl overflow-hidden shadow-lg" id="calendarGrid">
+                        <!-- Calendar will be generated by JavaScript -->
+                    </div>
+                    <div class="text-center mt-6">
+                        <div class="flex justify-center items-center gap-5 flex-wrap bg-white p-4 rounded-2xl shadow-md">
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gradient-to-br from-pink-500 to-pink-400 rounded"></div>
+                                <span class="text-gray-600 text-sm">Available</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gradient-to-br from-red-100 to-red-200 rounded"></div>
+                                <span class="text-gray-600 text-sm">Booked</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gray-50 border-2 border-orange-500 rounded"></div>
+                                <span class="text-gray-600 text-sm">Today</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gray-50 rounded"></div>
+                                <span class="text-gray-600 text-sm">Past/Unavailable</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Time Selection -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step3">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Select Time</h2>
+                <p class="text-center text-gray-600 mb-6">
+                    Selected Date: <strong id="selectedDateDisplay">Please select a date first</strong>
+                </p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="timeGrid">
+                    <!-- Time slots will be generated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Step 4: Personal Information -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step4">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Your Information</h2>
+                <form id="personalInfoForm" class="max-w-2xl mx-auto">
+                    <div class="mb-6">
+                        <label class="block mb-2 text-gray-700 font-bold" for="fullName">Full Name</label>
+                        <input type="text" id="fullName" class="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" placeholder="Enter your full name" required>
+                        <div class="error-message bg-red-50 text-red-600 p-3 rounded-lg mt-2" id="nameError">Please enter your full name</div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <label class="block mb-2 text-gray-700 font-bold">Phone Number</label>
+                        <div class="flex gap-3">
+                            <select class="w-32 px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" id="countryCode">
+                                <option value="+63">🇵🇭 +63</option>
+                                <option value="+1">🇺🇸 +1</option>
+                                <option value="+44">🇬🇧 +44</option>
+                                <option value="+81">🇯🇵 +81</option>
+                            </select>
+                            <input type="tel" id="phoneNumber" class="flex-1 px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" placeholder="9123456789" required>
+                        </div>
+                        <div class="error-message bg-red-50 text-red-600 p-3 rounded-lg mt-2" id="phoneError">Please enter a valid phone number</div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block mb-2 text-gray-700 font-bold" for="email">Email Address (Optional)</label>
+                        <input type="email" id="email" class="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" placeholder="your.email@example.com">
+                    </div>
+                </form>
+
+                <!-- OTP Verification -->
+                <div class="otp-container text-center p-6 bg-pink-50 rounded-2xl mt-6" id="otpContainer" style="display: none;">
+                    <h3 class="text-xl font-bold text-pink-600 mb-2">Verify Your Phone Number</h3>
+                    <p class="text-gray-600 mb-4">We've sent a verification code to <strong id="phoneDisplay"></strong></p>
+                    <div class="flex justify-center gap-3 mb-4">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                    </div>
+                    <div class="text-gray-600 text-sm mb-2" id="otpTimer">
+                        Resend code in <span id="countdown">60</span>s or <span class="text-pink-600 cursor-pointer underline font-bold" id="resendOtp" style="display: none;" onclick="resendOTP()">Resend Now</span>
+                    </div>
+                    <div class="error-message bg-red-50 text-red-600 p-3 rounded-lg" id="otpError">Invalid verification code</div>
+                </div>
+            </div>
+
+            <!-- Step 5: Payment -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step5">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Payment & Confirmation</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="payment-method border-2 border-pink-500 rounded-2xl p-6 text-center cursor-pointer transition-all bg-pink-50" data-method="gcash">
+                        <div class="text-2xl font-bold text-pink-600 mb-3">GC</div>
+                        <h4 class="font-bold text-lg mb-1">GCash</h4>
+                        <p class="text-gray-600 text-sm">Mobile Payment</p>
+                    </div>
+                    <div class="payment-method border-2 border-gray-300 rounded-2xl p-6 text-center cursor-pointer transition-all hover:border-pink-500" data-method="maya">
+                        <div class="text-2xl font-bold text-gray-600 mb-3">MY</div>
+                        <h4 class="font-bold text-lg mb-1">Maya (PayMaya)</h4>
+                        <p class="text-gray-600 text-sm">Digital Wallet</p>
+                    </div>
+                    <div class="payment-method border-2 border-gray-300 rounded-2xl p-6 text-center cursor-pointer transition-all hover:border-pink-500" data-method="bank">
+                        <div class="text-2xl font-bold text-gray-600 mb-3">BT</div>
+                        <h4 class="font-bold text-lg mb-1">Bank Transfer</h4>
+                        <p class="text-gray-600 text-sm">Direct Transfer</p>
+                    </div>
+                </div>
+
+                <!-- Payment Details -->
+                <div class="text-center mt-8" id="paymentDetails">
+                    <h3 class="text-xl font-bold mb-5">Scan QR Code to Pay</h3>
+                    <div class="w-48 h-48 bg-gray-100 border-2 border-gray-300 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                        <div class="text-center">
+                            <div class="text-4xl font-bold text-gray-400 mb-2">QR</div>
+                            <div class="text-sm text-gray-500">Code</div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-pink-50 p-6 rounded-2xl mb-6 max-w-md mx-auto">
+                        <div class="flex justify-between mb-3 pb-3 border-b">
+                            <span class="text-gray-600">Design:</span>
+                            <span class="font-bold" id="paymentDesignName">Clean & Modern</span>
+                        </div>
+                        <div class="flex justify-between mb-3 pb-3 border-b">
+                            <span class="text-gray-600">Date:</span>
+                            <span class="font-bold" id="paymentDate">-</span>
+                        </div>
+                        <div class="flex justify-between mb-3 pb-3 border-b">
+                            <span class="text-gray-600">Time:</span>
+                            <span class="font-bold" id="paymentTime">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Reservation Fee (50%):</span>
+                            <span class="font-bold text-green-600" id="reservationAmount">₱149.50</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-yellow-50 border border-yellow-300 p-4 rounded-xl mb-6 max-w-md mx-auto">
+                        <p class="text-yellow-800 text-left">
+                            <strong>Payment Instructions:</strong><br>
+                            1. Scan the QR code with your <span id="selectedPaymentMethod">GCash</span> app<br>
+                            2. Pay the reservation amount<br>
+                            3. Take a screenshot of the receipt<br>
+                            4. Upload it below to confirm your booking
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Receipt Upload -->
+                <div class="receipt-upload border-2 border-dashed border-pink-500 rounded-2xl p-8 text-center cursor-pointer transition-all bg-pink-50/50 hover:bg-pink-50" id="receiptUpload" onclick="document.getElementById('receiptFile').click()">
+                    <div class="text-3xl font-bold text-pink-500 mb-3">Upload</div>
+                    <div class="text-gray-700 font-semibold mb-2">Click to upload payment receipt</div>
+                    <small class="text-gray-500">or drag and drop your screenshot here</small>
+                    <input type="file" id="receiptFile" class="hidden" accept="image/*">
+                </div>
+
+                <div id="uploadedReceipt" class="hidden">
+                    <!-- Uploaded file will be displayed here -->
+                </div>
+            </div>
+
+            <!-- Success Step -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6 text-center" id="successStep" style="display: none;">
+                <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-green-600 mb-6">Booking Submitted Successfully!</h2>
+                
+                <div class="bg-green-50 p-6 rounded-2xl mb-6 text-left max-w-2xl mx-auto">
+                    <h3 class="text-xl font-bold text-pink-600 mb-4">Booking Summary</h3>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Booking ID:</span>
+                        <span class="font-bold" id="bookingId">#DCAC-2024-001</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Design:</span>
+                        <span class="font-bold" id="summaryDesign">Clean & Modern</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Date:</span>
+                        <span class="font-bold" id="summaryDate">December 15, 2024</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Time:</span>
+                        <span class="font-bold" id="summaryTime">2:00 PM</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Total Amount:</span>
+                        <span class="font-bold" id="summaryTotal">₱299.00</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Paid (Reservation):</span>
+                        <span class="font-bold" id="summaryPaid">₱149.50</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Remaining Balance:</span>
+                        <span class="font-bold text-green-600" id="summaryBalance">₱149.50</span>
+                    </div>
+                </div>
+
+                <div class="bg-green-50 border border-green-300 p-6 rounded-2xl mb-6 max-w-2xl mx-auto text-left">
+                    <h4 class="text-green-800 font-bold mb-4">What's Next?</h4>
+                    <ul class="text-green-800 list-disc pl-6 space-y-2">
+                        <li>Your booking is now <strong>pending approval</strong></li>
+                        <li>We'll review your payment receipt within 24 hours</li>
+                        <li>You'll receive a confirmation via SMS/Email</li>
+                        <li>Pay the remaining balance on your appointment day</li>
+                        <li>Bring a valid ID for verification</li>
+                    </ul>
+                </div>
+
+                <div class="flex gap-4 justify-center mt-8">
+                    <button class="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-full font-bold transition-all" onclick="window.location.href='homepage.html'">Back to Home</button>
+                    <button class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold transition-all" onclick="downloadBookingDetails()">Download Details</button>
+                </div>
+            </div>
+
+            <!-- Step Navigation -->
+            <div class="flex justify-between items-center mt-8" id="stepNavigation">
+                <button class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-8 py-3 rounded-full font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" id="prevBtn" onclick="previousStep()" disabled>Previous</button>
+                <button class="bg-gradient-to-r from-pink-500 to-pink-400 hover:from-pink-600 hover:to-pink-500 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg" id="nextBtn" onclick="nextStep()">Next</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Booking state management
+        let currentStep = 1;
+        let bookingData = {
+            design: {
+                id: null,
+                name: 'Clean & Modern',
+                price: 299,
+                image: 'Clean & Modern',
+                description: 'Minimalist logo design with modern aesthetics'
+            },
+            selectedDate: null,
+            selectedTime: null,
+            personalInfo: {},
+            paymentMethod: 'gcash',
+            receiptUploaded: false,
+            otpVerified: false
+        };
+
+        // Initialize booking data from URL parameters
+        function initializeFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const designName = urlParams.get('design');
+            const designPrice = urlParams.get('price');
+            const designImage = urlParams.get('image');
+            const designDescription = urlParams.get('description');
+
+            if (designName) {
+                bookingData.design.name = decodeURIComponent(designName);
+                bookingData.design.price = parseFloat(designPrice) || 299;
+                bookingData.design.image = decodeURIComponent(designImage) || 'Design';
+                bookingData.design.description = decodeURIComponent(designDescription) || 'Professional design service';
+                
+                updateSelectedDesign();
+            }
+        }
+
+        // Update selected design display
+        function updateSelectedDesign() {
+            document.getElementById('selectedDesignName').textContent = bookingData.design.name;
+            document.getElementById('selectedDesignPrice').textContent = `${bookingData.design.price}`;
+            document.getElementById('selectedDesignImage').textContent = bookingData.design.image;
+            document.getElementById('selectedDesignDescription').textContent = bookingData.design.description;
+        }
+
+        // Change design - redirect to collection page
+        function changeDesign() {
+            window.location.href = 'collection page.html';
+        }
+
+        // Calendar functionality
+        let currentDate = new Date();
+        let selectedDate = null;
+
+        // Unavailable dates (example data - in production, fetch from backend)
+        const unavailableDates = [
+            '2024-12-25', // Christmas
+            '2024-12-31', // New Year's Eve
+            '2025-01-01', // New Year's Day
+            '2024-12-22', // Fully booked
+            '2024-12-29'  // Fully booked
+        ];
+
+        function generateCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            document.getElementById('monthYear').textContent = 
+                new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            const firstDayOfMonth = new Date(year, month, 1);
+            const lastDayOfMonth = new Date(year, month + 1, 0);
+            const firstDayWeekday = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, etc.
+            const daysInMonth = lastDayOfMonth.getDate();
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let html = '';
+            
+            // Day headers - MUST be exactly 7 items
+            const dayHeaders = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            console.log('Day headers count:', dayHeaders.length); // Debug log
+            
+            dayHeaders.forEach((day, index) => {
+                html += `<div class="calendar-day header bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold text-sm flex items-center justify-center" style="grid-column: ${index + 1};">${day}</div>`;
+            });
+            
+            // Calculate the starting date for the calendar (may include days from previous month)
+            const startDate = new Date(firstDayOfMonth);
+            startDate.setDate(startDate.getDate() - firstDayWeekday);
+            
+            // Generate exactly 6 weeks (42 days) starting from row 2
+            let dayCount = 0;
+            for (let week = 0; week < 6; week++) {
+                for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+                    const currentDateObj = new Date(startDate);
+                    currentDateObj.setDate(startDate.getDate() + dayCount);
+                    
+                    const day = currentDateObj.getDate();
+                    const currentMonth = currentDateObj.getMonth();
+                    const currentYear = currentDateObj.getFullYear();
+                    const dateString = currentDateObj.toISOString().split('T')[0];
+                    
+                    // Determine if this day belongs to the current month
+                    const isCurrentMonth = currentMonth === month && currentYear === year;
+                    const isPast = currentDateObj < today;
+                    const isToday = currentDateObj.getTime() === today.getTime();
+                    const isUnavailable = unavailableDates.includes(dateString);
+                    const isSelected = selectedDate === dateString;
+                    
+                    let classes = 'calendar-day bg-white text-gray-800 font-bold flex items-center justify-center cursor-pointer hover:bg-pink-100 transition-all';
+                    let clickHandler = '';
+                    
+                    if (!isCurrentMonth) {
+                        classes = 'calendar-day bg-gray-50 text-gray-400 cursor-not-allowed flex items-center justify-center';
+                    } else if (isPast) {
+                        classes = 'calendar-day bg-gray-50 text-gray-400 cursor-not-allowed flex items-center justify-center';
+                    } else if (isUnavailable) {
+                        classes = 'calendar-day unavailable flex items-center justify-center';
+                    } else {
+                        // Available for selection
+                        clickHandler = `onclick="selectDate('${dateString}')"`;
+                    }
+                    
+                    if (isToday) classes += ' today border-2 border-orange-500';
+                    if (isSelected) classes = 'calendar-day selected bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold flex items-center justify-center relative';
+                    
+                    const gridRow = week + 2; // Start from row 2 (after header row)
+                    const gridCol = dayOfWeek + 1; // Start from column 1
+                    
+                    html += `<div class="${classes}" data-date="${dateString}" ${clickHandler} style="grid-row: ${gridRow}; grid-column: ${gridCol};">${day}</div>`;
+                    
+                    dayCount++;
+                }
+            }
+            
+            console.log('Total calendar items generated:', html.split('<div').length - 1); // Debug log
+            document.getElementById('calendarGrid').innerHTML = html;
+        }
+
+        function selectDate(dateString) {
+            const dateElement = document.querySelector(`[data-date="${dateString}"]`);
+            if (!dateElement || dateElement.classList.contains('disabled') || 
+                dateElement.classList.contains('unavailable') || 
+                dateElement.classList.contains('other-month')) {
+                return;
+            }
+            
+            // Remove previous selection
+            document.querySelectorAll('.calendar-day.selected, .calendar-day .selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            
+            // Add new selection
+            const daySpan = dateElement.querySelector('span') || dateElement;
+            daySpan.classList.add('selected');
+            dateElement.classList.add('selected');
+            
+            selectedDate = dateString;
+            bookingData.selectedDate = dateString;
+            
+            // Update display
+            const date = new Date(dateString);
+            const formattedDate = date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            document.getElementById('selectedDateDisplay').textContent = formattedDate;
+            
+            // Generate time slots for selected date
+            generateTimeSlots(dateString);
+        }
+
+        // Calendar navigation
+        document.getElementById('prevMonth').addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            generateCalendar();
+        });
+
+        document.getElementById('nextMonth').addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            generateCalendar();
+        });
+
+        // Time slot functionality
+        // Get time slots based on day of week
+        function getTimeSlotsForDate(dateString) {
+            const date = new Date(dateString);
+            const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+            
+            // Monday-Friday (1-5): 8am, 12pm, 4pm, 6pm, 8pm
+            // Saturday-Sunday (0, 6): 8am, 10am, 1pm, 3pm, 5pm, 7pm
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                // Weekdays (Mon-Fri)
+                return ['8:00 AM', '12:00 PM', '4:00 PM', '6:00 PM', '8:00 PM'];
+            } else {
+                // Weekends (Sat-Sun)
+                return ['8:00 AM', '10:00 AM', '1:00 PM', '3:00 PM', '5:00 PM', '7:00 PM'];
+            }
+        }
+
+        // Unavailable time slots for specific dates (example data)
+        const unavailableTimeSlots = {
+            '2024-12-20': ['10:00 AM', '2:00 PM'],
+            '2024-12-21': ['9:00 AM', '1:00 PM', '3:00 PM']
+        };
+
+        function generateTimeSlots(date) {
+            const unavailableForDate = unavailableTimeSlots[date] || [];
+            const timeSlots = getTimeSlotsForDate(date);
+            let html = '';
+            
+            timeSlots.forEach(time => {
+                const isUnavailable = unavailableForDate.includes(time);
+                const baseClasses = 'px-4 py-3 border-2 rounded-xl text-center font-bold transition-all';
+                const classes = isUnavailable 
+                    ? `${baseClasses} bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed`
+                    : `${baseClasses} bg-white text-gray-700 border-gray-300 hover:border-pink-500 hover:bg-pink-50 cursor-pointer`;
+                html += `<div class="${classes}" data-time="${time}" onclick="selectTime('${time}')">${time}</div>`;
+            });
+            
+            document.getElementById('timeGrid').innerHTML = html;
+        }
+
+        function selectTime(time) {
+            const timeElement = document.querySelector(`[data-time="${time}"]`);
+            if (timeElement.classList.contains('unavailable') || timeElement.classList.contains('cursor-not-allowed')) {
+                return;
+            }
+            
+            // Remove previous selection
+            document.querySelectorAll('[data-time]').forEach(el => {
+                el.classList.remove('selected', 'bg-pink-500', 'text-white', 'border-pink-500');
+                if (!el.classList.contains('unavailable') && !el.classList.contains('cursor-not-allowed')) {
+                    el.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+                }
+            });
+            
+            // Add new selection
+            timeElement.classList.add('selected', 'bg-pink-500', 'text-white', 'border-pink-500');
+            timeElement.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+            bookingData.selectedTime = time;
+        }
+
+        // Step navigation
+        function updateProgressBar() {
+            const progressPercentage = (currentStep / 5) * 100;
+            document.getElementById('progressFill').style.width = `${progressPercentage}%`;
+            
+            // Update step circles
+            for (let i = 1; i <= 5; i++) {
+                const circle = document.getElementById(`step${i}Circle`);
+                circle.classList.remove('active', 'completed');
+                
+                if (i < currentStep) {
+                    circle.classList.add('completed');
+                    circle.innerHTML = '✓';
+                } else if (i === currentStep) {
+                    circle.classList.add('active');
+                    circle.innerHTML = i;
+                } else {
+                    circle.innerHTML = i;
+                }
+            }
+        }
+
+        function showStep(stepNumber) {
+            // Hide all steps
+            document.querySelectorAll('.step-content').forEach(step => {
+                step.classList.remove('active');
+            });
+            
+            // Show current step
+            document.getElementById(`step${stepNumber}`).classList.add('active');
+            
+            // Update navigation buttons
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            prevBtn.disabled = stepNumber === 1;
+            
+            if (stepNumber === 5) {
+                nextBtn.textContent = 'Complete Booking';
+                nextBtn.classList.add('complete-btn');
+            } else {
+                nextBtn.textContent = 'Next';
+                nextBtn.classList.remove('complete-btn');
+            }
+            
+            updateProgressBar();
+            
+            // Auto-fill user info when step 4 is shown
+            if (stepNumber === 4) {
+                autoFillUserInfo();
+            }
+            
+            // Special handling for payment step
+            if (stepNumber === 5) {
+                updatePaymentSummary();
+            }
+        }
+        
+        // Auto-fill user information from Firebase Auth
+        function autoFillUserInfo() {
+            if (window.auth) {
+                const user = window.auth.currentUser;
+                if (user) {
+                    const fullNameInput = document.getElementById('fullName');
+                    const emailInput = document.getElementById('email');
+                    
+                    // Only auto-fill if fields are empty (allows user to edit)
+                    if (fullNameInput && user.displayName && !fullNameInput.value.trim()) {
+                        fullNameInput.value = user.displayName;
+                    }
+                    
+                    if (emailInput && user.email && !emailInput.value.trim()) {
+                        emailInput.value = user.email;
+                    }
+                }
+            }
+        }
+
+        function nextStep() {
+            if (!validateCurrentStep()) {
+                return;
+            }
+            
+            if (currentStep === 5) {
+                completeBooking();
+                return;
+            }
+            
+            currentStep++;
+            showStep(currentStep);
+        }
+
+        function previousStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                showStep(currentStep);
+            }
+        }
+
+        // Validation functions
+        function validateCurrentStep() {
+            switch (currentStep) {
+                case 1:
+                    return true; // Design is pre-selected
+                    
+                case 2:
+                    if (!bookingData.selectedDate) {
+                        alert('Please select a date for your appointment.');
+                        return false;
+                    }
+                    return true;
+                    
+                case 3:
+                    if (!bookingData.selectedTime) {
+                        alert('Please select a time for your appointment.');
+                        return false;
+                    }
+                    return true;
+                    
+                case 4:
+                    return validatePersonalInfo();
+                    
+                case 5:
+                    if (!bookingData.receiptUploaded) {
+                        alert('Please upload your payment receipt to complete the booking.');
+                        return false;
+                    }
+                    return true;
+                    
+                default:
+                    return true;
+            }
+        }
+
+        function validatePersonalInfo() {
+            const fullName = document.getElementById('fullName').value.trim();
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            
+            // Clear previous errors
+            document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
+            
+            let isValid = true;
+            
+            if (!fullName || fullName.length < 2) {
+                document.getElementById('nameError').classList.add('show');
+                isValid = false;
+            }
+            
+            if (!phoneNumber || phoneNumber.length < 10) {
+                document.getElementById('phoneError').classList.add('show');
+                isValid = false;
+            }
+            
+            if (isValid && !bookingData.otpVerified) {
+                // Send OTP
+                sendOTP();
+                return false; // Don't proceed until OTP is verified
+            }
+            
+            return isValid && bookingData.otpVerified;
+        }
+
+        // OTP functionality
+        let otpCountdown = 60;
+        let otpTimer = null;
+
+        function sendOTP() {
+            const countryCode = document.getElementById('countryCode').value;
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const fullPhone = `${countryCode}${phoneNumber}`;
+            
+            bookingData.personalInfo = {
+                fullName: document.getElementById('fullName').value.trim(),
+                phone: fullPhone,
+                email: document.getElementById('email').value.trim()
+            };
+            
+            // Show OTP container
+            document.getElementById('otpContainer').style.display = 'block';
+            document.getElementById('phoneDisplay').textContent = fullPhone;
+            
+            // Start countdown
+            startOTPCountdown();
+            
+            // Simulate OTP sending
+            console.log('OTP sent to:', fullPhone);
+            alert(`Verification code sent to ${fullPhone}`);
+            
+            // Focus first OTP input
+            document.querySelector('.otp-input').focus();
+        }
+
+        function startOTPCountdown() {
+            otpCountdown = 60;
+            const countdownElement = document.getElementById('countdown');
+            const resendButton = document.getElementById('resendOtp');
+            
+            resendButton.style.display = 'none';
+            
+            otpTimer = setInterval(() => {
+                otpCountdown--;
+                countdownElement.textContent = otpCountdown;
+                
+                if (otpCountdown <= 0) {
+                    clearInterval(otpTimer);
+                    countdownElement.textContent = '0';
+                    resendButton.style.display = 'inline';
+                }
+            }, 1000);
+        }
+
+        function resendOTP() {
+            sendOTP();
+        }
+
+        function verifyOTP() {
+            const otpInputs = document.querySelectorAll('.otp-input');
+            const otpCode = Array.from(otpInputs).map(input => input.value).join('');
+            
+            // Simulate OTP verification (in production, verify with backend)
+            if (otpCode.length === 6) {
+                // For demo purposes, accept any 6-digit code
+                bookingData.otpVerified = true;
+                document.getElementById('otpContainer').style.display = 'none';
+                alert('Phone number verified successfully!');
+                return true;
+            } else {
+                document.getElementById('otpError').classList.add('show');
+                return false;
+            }
+        }
+
+        // OTP input handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const otpInputs = document.querySelectorAll('.otp-input');
+            
+            otpInputs.forEach((input, index) => {
+                input.addEventListener('input', function(e) {
+                    if (e.target.value.length === 1) {
+                        if (index < otpInputs.length - 1) {
+                            otpInputs[index + 1].focus();
+                        } else {
+                            // All fields filled, verify OTP
+                            setTimeout(() => {
+                                if (verifyOTP()) {
+                                    nextStep();
+                                }
+                            }, 100);
+                        }
+                    }
+                });
+                
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                        otpInputs[index - 1].focus();
+                    }
+                });
+            });
+        });
+
+        // Payment functionality
+        function updatePaymentSummary() {
+            const reservationFee = bookingData.design.price / 2;
+            
+            document.getElementById('paymentDesignName').textContent = bookingData.design.name;
+            document.getElementById('paymentDate').textContent = 
+                bookingData.selectedDate ? new Date(bookingData.selectedDate).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                }) : '-';
+            document.getElementById('paymentTime').textContent = bookingData.selectedTime || '-';
+            document.getElementById('reservationAmount').textContent = `${reservationFee.toFixed(2)}`;
+        }
+
+        // Payment method selection
+        document.addEventListener('DOMContentLoaded', function() {
+            const paymentMethods = document.querySelectorAll('.payment-method');
+            
+            paymentMethods.forEach(method => {
+                method.addEventListener('click', function() {
+                    paymentMethods.forEach(m => m.classList.remove('selected'));
+                    this.classList.add('selected');
+                    
+                    const methodType = this.dataset.method;
+                    bookingData.paymentMethod = methodType;
+                    
+                    // Update payment method display
+                    const methodNames = {
+                        gcash: 'GCash',
+                        maya: 'Maya (PayMaya)',
+                        bank: 'Bank Transfer'
+                    };
+                    document.getElementById('selectedPaymentMethod').textContent = methodNames[methodType];
+                });
+            });
+        });
+
+        // Receipt upload functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const receiptUpload = document.getElementById('receiptUpload');
+            const receiptFile = document.getElementById('receiptFile');
+            
+            receiptFile.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    handleReceiptUpload(e.target.files[0]);
+                }
+            });
+            
+            // Drag and drop functionality
+            receiptUpload.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                receiptUpload.classList.add('dragover');
+            });
+            
+            receiptUpload.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                receiptUpload.classList.remove('dragover');
+            });
+            
+            receiptUpload.addEventListener('drop', function(e) {
+                e.preventDefault();
+                receiptUpload.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length > 0) {
+                    handleReceiptUpload(e.dataTransfer.files[0]);
+                }
+            });
+        });
+
+        function handleReceiptUpload(file) {
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                alert('Please upload an image file (PNG, JPG, etc.)');
+                return;
+            }
+            
+            // Validate file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File size should be less than 5MB');
+                return;
+            }
+            
+            bookingData.receiptUploaded = true;
+            
+            // Display uploaded file
+            const uploadedReceipt = document.getElementById('uploadedReceipt');
+            uploadedReceipt.style.display = 'block';
+            uploadedReceipt.innerHTML = `
+                <div class="flex items-center gap-4 bg-white border border-gray-300 rounded-xl p-4">
+                    <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-bold text-gray-800">${file.name}</div>
+                        <div class="text-gray-600 text-sm">${(file.size / 1024).toFixed(1)} KB</div>
+                    </div>
+                    <button onclick="removeReceipt()" class="bg-red-500 hover:bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center cursor-pointer transition-all">×</button>
+                </div>
+            `;
+            
+            // Hide upload area
+            document.getElementById('receiptUpload').classList.add('hidden');
+            uploadedReceipt.classList.remove('hidden');
+        }
+
+        function removeReceipt() {
+            bookingData.receiptUploaded = false;
+            document.getElementById('uploadedReceipt').classList.add('hidden');
+            document.getElementById('receiptUpload').classList.remove('hidden');
+            document.getElementById('receiptFile').value = '';
+        }
+
+        // Complete booking
+        function completeBooking() {
+            // Generate booking ID
+            const bookingId = 'DCAC-' + new Date().getFullYear() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+            
+            // Show success step
+            document.getElementById('stepNavigation').style.display = 'none';
+            document.getElementById('successStep').style.display = 'block';
+            
+            // Update success summary
+            const reservationFee = bookingData.design.price / 2;
+            const remainingBalance = bookingData.design.price - reservationFee;
+            
+            document.getElementById('bookingId').textContent = '#' + bookingId;
+            document.getElementById('summaryDesign').textContent = bookingData.design.name;
+            document.getElementById('summaryDate').textContent = 
+                new Date(bookingData.selectedDate).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+            document.getElementById('summaryTime').textContent = bookingData.selectedTime;
+            document.getElementById('summaryTotal').textContent = `${bookingData.design.price.toFixed(2)}`;
+            document.getElementById('summaryPaid').textContent = `${reservationFee.toFixed(2)}`;
+            document.getElementById('summaryBalance').textContent = `${remainingBalance.toFixed(2)}`;
+            
+            // In production, send booking data to backend
+            console.log('Booking completed:', {
+                bookingId,
+                ...bookingData,
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            });
+            
+            // Simulate backend call
+            setTimeout(() => {
+                alert('Booking confirmation will be sent to your phone and email shortly!');
+            }, 2000);
+        }
+
+        // Download booking details
+        function downloadBookingDetails() {
+            const bookingDetails = `
+DCAC Design Studio - Booking Confirmation
+========================================
+
+Booking ID: ${document.getElementById('bookingId').textContent}
+Design: ${document.getElementById('summaryDesign').textContent}
+Date: ${document.getElementById('summaryDate').textContent}
+Time: ${document.getElementById('summaryTime').textContent}
+Client: ${bookingData.personalInfo.fullName}
+Phone: ${bookingData.personalInfo.phone}
+Email: ${bookingData.personalInfo.email}
+
+Payment Summary:
+- Total Amount: ${document.getElementById('summaryTotal').textContent}
+- Paid (Reservation): ${document.getElementById('summaryPaid').textContent}
+- Remaining Balance: ${document.getElementById('summaryBalance').textContent}
+
+Status: Pending Confirmation
+
+Thank you for choosing DCAC Design Studio!
+Visit us at: Your Studio Address
+Contact: +63 xxx xxx xxxx
+            `.trim();
+            
+            const blob = new Blob([bookingDetails], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'DCAC_Booking_Details.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeFromURL();
+            generateCalendar();
+            showStep(1);
+            
+            // Auto-advance from step 1 if design is pre-selected
+            if (new URLSearchParams(window.location.search).get('design')) {
+                setTimeout(() => {
+                    nextStep();
+                }, 1500);
+            }
+        });
+    </script>
+</body>
+</html>

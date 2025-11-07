@@ -1,4 +1,19 @@
 /**
+ * Escapes HTML attribute values to prevent XSS and broken HTML
+ * @param {string} str - The string to escape
+ * @returns {string} The escaped string
+ */
+const escapeHtmlAttr = (str) => {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+};
+
+/**
  * Renders a single content card (for Promo, Credential, or Design).
  * @param {Object} item - The data item.
  * @param {string} type - 'promo', 'credential', or 'design'.
@@ -23,7 +38,11 @@ const renderContentCard = (item, type) => {
                 <p class="text-pink-300 text-sm font-semibold">₱${item.price.toFixed(2)}</p>
                 
                 <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors"
-                        data-design-id="${item.id}">Book Now</button>
+                        data-design-id="${item.id}"
+                        data-design-title="${escapeHtmlAttr(item.title || 'Design')}"
+                        data-design-price="${item.price || 0}"
+                        data-design-image="${escapeHtmlAttr(item.imageUrl || '')}"
+                        data-design-description="${escapeHtmlAttr(item.description || 'Professional design service')}">Book Now</button>
             </div>
         `;
     } else if (type === 'promo') {
@@ -123,7 +142,7 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
         <div class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
                 <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                    <a href="home.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                    <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
                     
                     <nav class="flex space-x-4 items-center">
                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
@@ -205,10 +224,13 @@ export const attachPublicPageListeners = () => {
     document.querySelectorAll('.book-design-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             e.preventDefault();
-            const designId = e.currentTarget.dataset.designId;
-            // Temporary handler: Later, this will redirect to a booking form or checkout page.
-            alert(`Booking requested for Design ID: ${designId}. Redirecting to booking page...`);
-            // window.location.href = 'booking.html?design=' + designId; // Example redirect
+            const designTitle = encodeURIComponent(e.currentTarget.dataset.designTitle || 'Design');
+            const designPrice = e.currentTarget.dataset.designPrice || '0';
+            const designImage = encodeURIComponent(e.currentTarget.dataset.designImage || '');
+            const designDescription = encodeURIComponent(e.currentTarget.dataset.designDescription || 'Professional design service');
+            
+            // Redirect to book.html with design parameters
+            window.location.href = `book.html?design=${designTitle}&price=${designPrice}&image=${designImage}&description=${designDescription}`;
         });
     });
 };
