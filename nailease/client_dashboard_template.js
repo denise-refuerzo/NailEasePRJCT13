@@ -6,7 +6,7 @@ export const clientDashboardTemplate = `
                 <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
                     <nav class="flex space-x-4 items-center">
                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
-                        <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
+                        <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
                         <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Book</a>
                         <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
                         <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Log Out</button>
