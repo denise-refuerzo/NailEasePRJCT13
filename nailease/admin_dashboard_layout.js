@@ -410,7 +410,7 @@ export function renderAdminLayout(container, user) {
                 <div class="hidden sm:flex space-x-4 items-center">
                                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
                     
-                    <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+                    <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
                     <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
                     
                                         <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
