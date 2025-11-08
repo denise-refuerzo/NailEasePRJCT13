@@ -6,7 +6,7 @@ import { getFirestore, doc, getDoc, setDoc, collection, serverTimestamp,addDoc, 
 
 // Import the layout renderer and listener attachment function
 import { renderClientLayout, attachClientDashboardListeners } from "./client_dashboard_layout.js"; 
-import { renderAdminLayout, attachAdminDashboardListeners, renderManageView } from "./admin_dashboard_layout.js"; 
+import { renderAdminLayout, attachAdminDashboardListeners, renderManageView, renderAppointmentsLayout, attachAppointmentsListeners } from "./admin_dashboard_layout.js"; 
 import { renderLoading, hideLoading, showContainer, hideContainer } from "./ui_manager.js";
 
 
@@ -33,6 +33,8 @@ const VERIFY_OTP_URL = 'https://us-central1-nailease25.cloudfunctions.net/verify
 //paths in the firestore
 const DESIGNS_COLLECTION = `content/${APP_ID}/designs`;
 const GALLERY_COLLECTION = `content/${APP_ID}/gallery`;
+const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+const LIST_CALENDAR_EVENTS_URL = 'https://us-central1-nailease25.cloudfunctions.net/listCalendarEvents';
 
 
 export function getClientDocRef(uid) {
@@ -163,6 +165,11 @@ export const state = {
     currentTab: 'designs', 
     designs: [], 
     gallery: [], 
+    bookings: [],
+    calendarEvents: [],
+    calendarEventsLoaded: false,
+    calendarEventsLoading: false,
+    calendarEventsError: null,
     editingDesign: null,
     
     // NEW PAGINATION STATE
@@ -170,13 +177,22 @@ export const state = {
     promosCurrentPage: 1,
     credentialsCurrentPage: 1,
     promosActiveCurrentPage: 1, // State for active promo pagination
+    bookingStatusFilter: 'all',
+    appointmentsTab: 'list',
 }; 
 
 export function setPage(page, tab = 'designs', targetPage = 1, activePromoPage = 1) { 
     console.log(`Setting page to ${page}, tab to ${tab}, list page: ${targetPage}, active promo page: ${activePromoPage}`);
     
     state.currentPage = page;
-    state.currentTab = tab;
+
+    if (page === 'appointments') {
+        const safeTab = tab || 'list';
+        state.currentTab = safeTab;
+        state.appointmentsTab = safeTab;
+    } else {
+        state.currentTab = tab;
+    }
     
     // Reset editing state
     if (page === 'dashboard' || page === 'manage') {
@@ -202,6 +218,15 @@ export function setTab(tab) {
     setPage(state.currentPage, tab, 1, 1); // Reset both list and active promo pages
 }
 
+export function setAppointmentsTab(tab) {
+    setPage('appointments', tab || 'list');
+}
+
+function setBookingStatusFilter(filter) {
+    state.bookingStatusFilter = filter;
+    window.checkAndSetRole(auth.currentUser);
+}
+
 async function fetchContent() {
     try {
         // Fetch Designs
@@ -213,6 +238,27 @@ async function fetchContent() {
         const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
         const gallerySnapshot = await getDocs(galleryQuery);
         state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Fetch Bookings (Admin Appointments)
+        const bookingsQuery = query(collection(db, BOOKINGS_COLLECTION), orderBy('createdAt', 'desc'));
+        const bookingsSnapshot = await getDocs(bookingsQuery);
+        state.bookings = bookingsSnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            const createdAt = data.createdAt && typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : null);
+            const updatedAt = data.updatedAt && typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt) : null);
+
+            const appointmentDate = data.selectedDate ? new Date(`${data.selectedDate}T00:00:00`) : null;
+
+            return {
+                id: docSnap.id,
+                ...data,
+                createdAt,
+                updatedAt,
+                appointmentDate
+            };
+        });
+
+        await refreshCalendarEvents(true);
 
     } catch (error) {
         console.error("Error fetching admin content:", error);
@@ -438,6 +484,203 @@ export async function toggleFeaturedDesign(id, isFeatured) {
     }
 } 
 
+export async function updateBookingStatus(bookingId, newStatus) {
+    try {
+        // NOTE: The 'cancelled' status is removed from the form in admin_dashboard_layout.js, 
+        // but the logic here remains to handle it if a user attempts to set it manually or it exists in the database.
+        const normalizedStatus = (newStatus || 'pending').toLowerCase();
+        const booking = state.bookings.find(b => b.id === bookingId);
+
+        const batch = writeBatch(db);
+        const bookingRef = doc(db, BOOKINGS_COLLECTION, bookingId);
+        const updates = {
+            status: normalizedStatus,
+            updatedAt: serverTimestamp()
+        };
+
+        batch.set(bookingRef, updates, { merge: true });
+
+        if (booking?.userId) {
+            const userBookingRef = doc(db, 'artifacts', APP_ID, 'users', booking.userId, 'bookings', bookingId);
+            batch.set(userBookingRef, updates, { merge: true });
+        }
+
+        await batch.commit();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Booking Updated',
+            text: `Status updated to ${normalizedStatus.toUpperCase()}.`,
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+        setTimeout(() => window.checkAndSetRole(auth.currentUser), 300);
+
+    } catch (error) {
+        console.error('Error updating booking status:', error);
+        Swal.fire('Failed!', 'Could not update booking status.', 'error');
+    }
+}
+
+export async function deleteBooking(bookingId) {
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            await deleteDoc(doc(db, BOOKINGS_COLLECTION, bookingId));
+            
+            // Also delete from user's bookings subcollection if it exists
+            const booking = state.bookings.find(b => b.id === bookingId);
+            if (booking?.userId) {
+                const userBookingRef = doc(db, 'artifacts', APP_ID, 'users', booking.userId, 'bookings', bookingId);
+                await deleteDoc(userBookingRef);
+            }
+            
+            window.checkAndSetRole(auth.currentUser); 
+            Swal.fire(
+                'Deleted!',
+                'The booking has been deleted.',
+                'success'
+            );
+        } catch (error) {
+            console.error("Error deleting booking:", error);
+            Swal.fire('Failed!', 'The booking could not be deleted.', 'error');
+        }
+    }
+}
+
+export async function createWalkInBooking(formData) {
+    const {
+        clientName,
+        clientPhone,
+        clientEmail = '',
+        selectedDate,
+        selectedTime,
+        designName = 'Walk-in Service',
+        notes = ''
+    } = formData;
+
+    // Check for required fields
+    if (!clientName || !clientPhone || !selectedDate || !selectedTime) {
+        Swal.fire('Incomplete Details', 'Please fill out name, phone, date, and time.', 'warning');
+        return;
+    }
+    
+    // Validate time format to ensure it's on the hour (e.g., 10:00, not 10:20)
+    const timeParts = selectedTime.split(':');
+    if (timeParts.length === 2 && parseInt(timeParts[1], 10) !== 0) {
+        Swal.fire('Invalid Time', 'Please select a time that is on the hour (e.g., 10:00, 11:00).', 'warning');
+        return;
+    }
+
+    try {
+        // --- REMOVED RESERVATION FEE LOGIC ---
+        // const reservationFee = formData.reservationFee ? Number(formData.reservationFee) : 0;
+        const totalAmount = formData.totalAmount ? Number(formData.totalAmount) : 0;
+        const bookingId = `WALK-${Date.now().toString(36).toUpperCase()}`;
+
+        const payload = {
+            bookingId,
+            clientName,
+            clientPhone,
+            clientEmail,
+            selectedDate,
+            selectedTime,
+            designName,
+            status: 'confirmed',
+            source: 'walk-in',
+            notes,
+            totalAmount,
+            amountPaid: 0, // Set to 0 since reservation fee is removed
+            paymentMethod: formData.paymentMethod || 'cash',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+
+        await addDoc(collection(db, BOOKINGS_COLLECTION), payload);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Walk-in Added',
+            text: `${clientName}'s appointment has been recorded.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
+
+        setTimeout(() => window.checkAndSetRole(auth.currentUser), 400);
+
+    } catch (error) {
+        console.error('Error creating walk-in booking:', error);
+        Swal.fire('Failed!', 'Could not save walk-in booking.', 'error');
+    }
+}
+
+async function refreshCalendarEvents(force = false) {
+    const user = auth.currentUser;
+    const isAdmin = user && user.uid === ADMIN_UID;
+
+    if (!isAdmin) {
+        return state.calendarEvents;
+    }
+
+    if (!force && (state.calendarEventsLoaded || state.calendarEventsLoading)) {
+        return state.calendarEvents;
+    }
+
+    if (state.calendarEventsLoading) {
+        return state.calendarEvents;
+    }
+
+    try {
+        state.calendarEventsLoading = true;
+        state.calendarEventsError = null;
+
+        const idToken = await user.getIdToken();
+        const now = new Date();
+        const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 3, 1);
+
+        const params = new URLSearchParams({
+            calendarId: 'primary',
+            timeMin: defaultStart.toISOString(),
+            timeMax: defaultEnd.toISOString()
+        });
+
+        const response = await fetch(`${LIST_CALENDAR_EVENTS_URL}?${params.toString()}`, {
+            headers: {
+                'Authorization': `Bearer ${idToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || `Calendar API returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        state.calendarEvents = Array.isArray(data.events) ? data.events : [];
+        state.calendarEventsLoaded = true;
+
+        return state.calendarEvents;
+
+    } catch (error) {
+        console.error('Failed to fetch calendar events:', error);
+        state.calendarEventsError = error?.message || 'Unable to load Google Calendar events. Check setup and try again.';
+        return [];
+    } finally {
+        state.calendarEventsLoading = false;
+    }
+}
+
 export function editDesign(id) { 
     const designToEdit = state.designs.find(d => d.id === id);
     if (designToEdit) {
@@ -516,11 +759,14 @@ function renderApp(user, clientData) {
             if (window.attachContentFormListeners) {
                 window.attachContentFormListeners();
             }
+            attachAdminDashboardListeners(logoutUser, user); 
+        } else if (state.currentPage === 'appointments') {
+            renderAppointmentsLayout(appContent, user, state);
+            attachAppointmentsListeners();
         } else {
             renderAdminLayout(appContent, user); 
+            attachAdminDashboardListeners(logoutUser, user); 
         }
-        
-        attachAdminDashboardListeners(logoutUser, user); 
 
     } else {
         // CLIENT FLOW
@@ -639,6 +885,7 @@ function attachGlobalFunctions() {
     // 1. Core Navigation
     window.setPage = setPage;
     window.setTab = setTab;
+    window.setAppointmentsTab = setAppointmentsTab;
 
     // 2. Content Actions
     window.saveDesign = saveDesign;
@@ -649,6 +896,17 @@ function attachGlobalFunctions() {
     window.toggleFeaturedDesign = toggleFeaturedDesign;
     window.editDesign = editDesign;
     window.updateDesignInline = updateDesignInline; // The function for inline saving
+    window.updateBookingStatus = updateBookingStatus;
+    window.deleteBooking = deleteBooking; // NEW: Add delete booking function
+    window.setBookingStatusFilter = setBookingStatusFilter;
+    window.createWalkInBooking = createWalkInBooking;
+    window.refreshCalendarEvents = refreshCalendarEvents;
+    window.refreshCalendarView = async (force = false) => {
+        await refreshCalendarEvents(force);
+        if (auth.currentUser) {
+            window.checkAndSetRole(auth.currentUser);
+        }
+    };
 
     // 3. Other Core
     window.logoutUser = logoutUser;
@@ -701,4 +959,4 @@ export function startAuthFlow() {
     });
 }
 
-onAuthStateChanged(auth, checkAndSetRole); 
+onAuthStateChanged(auth, checkAndSetRole);

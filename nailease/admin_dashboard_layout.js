@@ -7,19 +7,164 @@ const DESIGNS_PER_PAGE = 3;
 const PROMOS_PER_PAGE = 5;
 const CREDENTIALS_PER_PAGE = 2;
 
+const DEFAULT_GOOGLE_CALENDAR_EMBED_URL = 'https://calendar.google.com/calendar/embed?src=naileaseph%40gmail.com&ctz=Asia%2FManila';
+const GOOGLE_CALENDAR_EMBED_URL = typeof window !== 'undefined'
+    ? (window.__NAILEASE_CALENDAR_EMBED_URL__ || DEFAULT_GOOGLE_CALENDAR_EMBED_URL)
+    : DEFAULT_GOOGLE_CALENDAR_EMBED_URL;
+
+// REMOVED 'cancelled' from filters and meta
+const APPOINTMENT_STATUS_FILTERS = ['all', 'pending', 'confirmed', 'completed'];
+const APPOINTMENT_STATUS_META = {
+    pending: {
+        label: 'Pending',
+        badgeClasses: 'bg-amber-100 text-amber-700 border border-amber-200',
+        dotClasses: 'bg-amber-500'
+    },
+    confirmed: {
+        label: 'Confirmed',
+        badgeClasses: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+        dotClasses: 'bg-emerald-500'
+    },
+    completed: {
+        label: 'Completed',
+        badgeClasses: 'bg-sky-100 text-sky-700 border border-sky-200',
+        dotClasses: 'bg-sky-500'
+    }
+    // REMOVED 'cancelled' META
+    // cancelled: {
+    //     label: 'Cancelled',
+    //     badgeClasses: 'bg-rose-100 text-rose-700 border border-rose-200',
+    //     dotClasses: 'bg-rose-500'
+    // }
+};
+
+const formatDate = (value) => {
+    if (!value) return 'No date set';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTime = (value) => {
+    if (!value) return 'No time set';
+
+    const toLocale = (date) => date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    if (value instanceof Date) {
+        // Enforce minute is 00 for display (though the source time might have minutes)
+        if (value.getMinutes() !== 0) {
+            value.setMinutes(0);
+        }
+        return toLocale(value);
+    }
+
+    if (typeof value === 'string') {
+        const parsedTimestamp = Date.parse(value);
+        if (!Number.isNaN(parsedTimestamp) && value.includes('T')) {
+            const date = new Date(parsedTimestamp);
+             // Enforce minute is 00 for display
+            if (date.getMinutes() !== 0) {
+                 date.setMinutes(0);
+            }
+            return toLocale(date);
+        }
+
+        try {
+            const [hourStr, minuteStr] = value.split(':');
+            const minute = parseInt(minuteStr || '0', 10);
+            const hour = parseInt(hourStr, 10);
+
+            // Time format check: ensure minute is 00
+            if (minute !== 0) {
+                 // For display, we force it to the hour, but for data integrity, we might want to alert if it's not.
+                 // Since this is a display function, we will force the display to the hour.
+            }
+            
+            if (hourStr === undefined) return value;
+            const date = new Date();
+            date.setHours(hour, 0); // Force minutes to 0
+            return toLocale(date);
+        } catch (error) {
+            return value;
+        }
+    }
+
+    return value;
+};
+
 //input skeleton
-const inputField = (id, label, type = 'text', value = '', required = true) => `
-    <label for="${id}" class="block text-sm font-medium text-gray-700 mt-3">${label}</label>
-    <input type="${type}" id="${id}" name="${id}" ${required ? 'required' : ''} 
-        value="${value}"
-        class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
-`;
-/**
- * Renders the Admin Dashboard content into the main container.
- * @param {HTMLElement} container - The main container element.
- * @param {firebase.User} user - The authenticated user object.
-   @returns {string} The HTML for the Dashboard view.
-*/
+const inputField = (id, label, type = 'text', value = '', required = true) => {
+    // Special handling for time input to show only hours and auto-set minutes to "00"
+    if (type === 'time') {
+        return `
+            <label for="${id}" class="block text-sm font-medium text-gray-700 mt-3">${label}</label>
+            <input type="time" id="${id}" name="${id}" ${required ? 'required' : ''} 
+                value="${value}"
+                step="3600" 
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white"
+                onchange="formatHourlyTime(this)">
+        `;
+    }
+    
+    return `
+        <label for="${id}" class="block text-sm font-medium text-gray-700 mt-3">${label}</label>
+        <input type="${type}" id="${id}" name="${id}" ${required ? 'required' : ''} 
+            value="${value}"
+            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+    `;
+};
+
+// Time formatting function - ensures minutes are always "00" and shows only hours in picker
+window.formatHourlyTime = function(input) {
+    if (input.type === 'time' && input.value) {
+        const [hours, minutes] = input.value.split(':');
+        // Force minutes to be "00" and update the input value
+        input.value = `${hours}:00`;
+    }
+};
+
+// Initialize time inputs to show only hours
+window.initializeTimeInputs = function() {
+    document.querySelectorAll('input[type="time"]').forEach(input => {
+        // Set step to 1 hour to show only hour options
+        input.step = 3600;
+        
+        // Ensure current value has ":00" minutes
+        if (input.value && !input.value.endsWith(':00')) {
+            const [hours] = input.value.split(':');
+            input.value = `${hours}:00`;
+        }
+        
+        // Add event listener to enforce format on change
+        input.addEventListener('change', function() {
+            window.formatHourlyTime(this);
+        });
+    });
+};
+
+// Custom time input that only shows hours
+window.createHourlyTimeInput = function(id, value = '') {
+    // Extract hour from value if provided
+    let hourValue = '';
+    if (value) {
+        const [hours] = value.split(':');
+        hourValue = hours;
+    }
+    
+    return `
+        <select id="${id}" name="${id}" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+            <option value="">Select Time</option>
+            ${Array.from({length: 12}, (_, i) => {
+                const hour = i + 8; // 8 AM to 7 PM
+                const displayHour = hour > 12 ? hour - 12 : hour;
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const timeValue = `${hour.toString().padStart(2, '0')}:00`;
+                const isSelected = hourValue === hour.toString().padStart(2, '0');
+                return `<option value="${timeValue}" ${isSelected ? 'selected' : ''}>${displayHour}:00 ${ampm}</option>`;
+            }).join('')}
+        </select>
+    `;
+};
 
 //Admin Profile Editing Modal
 const adminProfileModalHtml = `
@@ -154,6 +299,7 @@ const renderDesignsTab = () => {
         </div>
     `;
 };
+
 //Promo Tab
 const renderPromoTab = () => {
     const activePromos = state.gallery.filter(item => item.type === 'promo' && item.isActive);
@@ -269,6 +415,7 @@ const renderPromoTab = () => {
         </div>
     `;
 };
+
 //Credential Tab
 const renderCredentialsTab = () => {
     const credentials = state.gallery.filter(item => item.type === 'credential');
@@ -397,6 +544,494 @@ export function renderManageView(user) {
     `;
 }
 
+export function renderAppointmentsLayout(container, user, state) {
+    const currentTab = state.appointmentsTab || state.currentTab || 'list';
+    const statusFilter = state.bookingStatusFilter || 'all';
+    const bookings = Array.isArray(state.bookings) ? state.bookings : [];
+    const calendarEvents = Array.isArray(state.calendarEvents) ? state.calendarEvents : [];
+    const calendarError = state.calendarEventsError;
+    const calendarLoading = state.calendarEventsLoading;
+
+    const filteredBookings = bookings
+        .filter(booking => {
+            if (statusFilter === 'all') return true;
+            const normalizedStatus = (booking.status || 'pending').toLowerCase();
+            return normalizedStatus === statusFilter;
+        })
+        .sort((a, b) => {
+            const dateA = a.appointmentDate || a.createdAt || 0;
+            const dateB = b.appointmentDate || b.createdAt || 0;
+            const timeA = dateA instanceof Date ? dateA.getTime() : new Date(dateA).getTime();
+            const timeB = dateB instanceof Date ? dateB.getTime() : new Date(dateB).getTime();
+            return timeA - timeB;
+        });
+
+    const stats = {
+        total: bookings.length,
+        pending: bookings.filter(b => (b.status || 'pending').toLowerCase() === 'pending').length,
+        confirmed: bookings.filter(b => (b.status || 'pending').toLowerCase() === 'confirmed').length,
+        completed: bookings.filter(b => (b.status || 'pending').toLowerCase() === 'completed').length,
+        calendarEvents: calendarEvents.length
+    };
+
+    const statusFiltersHtml = APPOINTMENT_STATUS_FILTERS.map(filterValue => {
+        const isActive = statusFilter === filterValue;
+        const label = filterValue === 'all' ? 'All' : (APPOINTMENT_STATUS_META[filterValue]?.label || filterValue);
+        return `
+            <button data-status-filter="${filterValue}" class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition border ${isActive ? 'bg-pink-600 text-white shadow-md border-pink-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-pink-50'}">
+                ${label}
+                ${filterValue === 'all' ? `<span class="ml-2 text-xs text-gray-500">${stats.total}</span>` : ''}
+            </button>
+        `;
+    }).join('');
+
+    const bookingCardsHtml = filteredBookings.length ? filteredBookings.map(booking => {
+        const currentStatusKey = (booking.status || 'pending').toLowerCase();
+        const statusMeta = APPOINTMENT_STATUS_META[currentStatusKey] || {
+            label: booking.status || 'Unknown',
+            badgeClasses: 'bg-gray-100 text-gray-600 border border-gray-200',
+            dotClasses: 'bg-gray-400'
+        };
+
+        const scheduledDate = booking.appointmentDate || booking.selectedDate;
+        const createdAt = booking.createdAt ? formatDate(booking.createdAt) : '—';
+        const updatedAt = booking.updatedAt ? formatDate(booking.updatedAt) : '—';
+
+        return `
+            <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-5">
+                <header class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-lg font-semibold text-gray-900">${booking.clientName || 'Unnamed Client'}</h3>
+                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full ${statusMeta.badgeClasses}">
+                                <span class="inline-flex w-2 h-2 rounded-full mr-1 ${statusMeta.dotClasses}"></span>
+                                ${statusMeta.label}
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-500">${booking.clientPhone || 'No contact provided'}</p>
+                        ${booking.clientEmail ? `<p class="text-xs text-gray-400">${booking.clientEmail}</p>` : ''}
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-gray-700">${booking.bookingId || booking.id}</p>
+                        <p class="text-xs text-gray-400">Created ${createdAt}</p>
+                        ${booking.updatedAt ? `<p class="text-xs text-gray-400">Updated ${updatedAt}</p>` : ''}
+                    </div>
+                </header>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-pink-50/60 border border-pink-100 rounded-lg p-3">
+                        <p class="text-xs uppercase font-semibold text-pink-500 tracking-wide">Schedule</p>
+                        <p class="text-base font-semibold text-gray-900">${formatDate(scheduledDate)}</p>
+                        <p class="text-sm text-gray-600">${formatTime(booking.selectedTime)}</p>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                        <p class="text-xs uppercase font-semibold text-gray-400 tracking-wide">Service</p>
+                        <p class="text-base font-semibold text-gray-900">${booking.designName || 'General Service'}</p>
+                        <p class="text-sm text-gray-600">Source: ${(booking.source || 'Online').toUpperCase()}</p>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                        <p class="text-xs uppercase font-semibold text-gray-400 tracking-wide">Payment</p>
+                        <p class="text-base font-semibold text-gray-900">₱${Number(booking.totalAmount || 0).toLocaleString()}</p>
+                        <p class="text-sm text-gray-600">Reserved: ₱${Number(booking.amountPaid || 0).toLocaleString()}</p>
+                    </div>
+                </div>
+
+                ${booking.notes ? `<p class="text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-lg p-3">${booking.notes}</p>` : ''}
+
+                <footer class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+                    <form class="flex flex-wrap items-center gap-3 appointment-status-form" data-booking-id="${booking.id}">
+                        <label class="text-sm font-medium text-gray-700" for="status-${booking.id}">Update Status</label>
+                        <select id="status-${booking.id}" name="status" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500">
+                            ${Object.keys(APPOINTMENT_STATUS_META).map(statusKey => {
+                                const isSelected = statusKey === currentStatusKey;
+                                // HINDI na sinasama ang 'cancelled' option dito
+                                return `<option value="${statusKey}" ${isSelected ? 'selected' : ''}>${APPOINTMENT_STATUS_META[statusKey].label}</option>`;
+                            }).join('')}
+                        </select>
+                        <button type="submit" class="px-4 py-2 bg-pink-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-pink-700 transition">Save</button>
+                        <button type="button" onclick="window.deleteBooking('${booking.id}')" class="px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-red-600 transition">Delete</button>
+                    </form>
+                    <div class="text-xs text-gray-400">
+                        <span>Booked via ${booking.platform || booking.source || 'unknown source'}</span>
+                    </div>
+                </footer>
+            </article>
+        `;
+    }).join('') : `
+        <div class="text-center py-12 border border-dashed border-pink-200 rounded-2xl bg-pink-50/40">
+            <p class="text-5xl mb-4 opacity-40">📅</p>
+            <h3 class="text-lg font-semibold text-gray-700">No Appointments Found</h3>
+            <p class="text-sm text-gray-500 mt-2">Try adjusting the filters or add a new walk-in appointment.</p>
+        </div>
+    `;
+
+// Updated Walk-in Form with consistent layout for all fields
+const walkInFormHtml = `
+<form id="walkInForm" class="space-y-4 bg-white border border-gray-100 p-6 rounded-xl shadow-sm">
+    <div>
+        <h3 class="text-xl font-semibold text-gray-800">Add Walk-in Appointment</h3>
+        <p class="text-sm text-gray-500 mt-1">Record quick walk-in bookings and sync to the master list.</p>
+    </div>
+
+    <div class="space-y-4">
+        <div>
+            <label for="clientName" class="block text-sm font-medium text-gray-700">Client Name</label>
+            <input type="text" id="clientName" name="clientName" required
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+        </div>
+
+        <div>
+            <label for="clientPhone" class="block text-sm font-medium text-gray-700">Contact Number</label>
+            <input type="text" id="clientPhone" name="clientPhone" required
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+        </div>
+
+        <div>
+            <label for="clientEmail" class="block text-sm font-medium text-gray-700">Email Address</label>
+            <input type="email" id="clientEmail" name="clientEmail"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+        </div>
+
+        <div>
+            <label for="designName" class="block text-sm font-medium text-gray-700">Requested Service / Design</label>
+            <input type="text" id="designName" name="designName" value="Walk-in Service"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+        </div>
+
+        <div>
+            <label for="selectedDate" class="block text-sm font-medium text-gray-700">Appointment Date</label>
+            <input type="date" id="selectedDate" name="selectedDate" required
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+        </div>
+
+        <div>
+            <label for="selectedTime" class="block text-sm font-medium text-gray-700">Appointment Time</label>
+            ${window.createHourlyTimeInput('selectedTime', '')}
+        </div>
+
+        <div>
+            <label for="totalAmount" class="block text-sm font-medium text-gray-700">Estimated Total (₱)</label>
+            <input type="number" id="totalAmount" name="totalAmount"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+        </div>
+
+        <div>
+            <label for="paymentMethod" class="block text-sm font-medium text-gray-700">Payment Method</label>
+            <select id="paymentMethod" name="paymentMethod" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+                <option value="cash">Cash</option>
+                <option value="gcash">GCash</option>
+                <option value="card">Card</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
+            <textarea id="notes" name="notes" rows="3" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white" placeholder="Optional instructions"></textarea>
+        </div>
+    </div>
+
+    <button type="submit" class="w-full flex items-center justify-center px-4 py-3 text-sm font-semibold rounded-lg shadow-sm text-white bg-pink-600 hover:bg-pink-700 transition duration-150">
+        Save Walk-in Booking
+    </button>
+</form>
+`;
+
+    const calendarEventsHtml = calendarEvents.length ? calendarEvents.map(event => {
+        const startValue = event.start?.dateTime || event.start?.date;
+        const endValue = event.end?.dateTime || event.end?.date;
+        const startDate = startValue ? new Date(startValue) : null;
+        const endDate = endValue ? new Date(endValue) : null;
+
+        const dateLabel = startDate ? formatDate(startDate) : 'No date';
+        const isAllDay = !!event.start?.date;
+        const timeLabel = isAllDay ? 'All-day' : `${formatTime(startValue)}${endValue ? ` – ${formatTime(endValue)}` : ''}`;
+
+        const description = event.description ? event.description.replace(/\n/g, '<br>') : '';
+        const attendees = Array.isArray(event.attendees) ? event.attendees.map(att => att.email).filter(Boolean) : [];
+
+        return `
+            <article class="border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition">
+                <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <p class="text-xs uppercase font-semibold text-pink-500 tracking-wide">${dateLabel}</p>
+                        <h4 class="text-lg font-semibold text-gray-900">${event.summary || 'Untitled Event'}</h4>
+                        <p class="text-sm text-gray-600">${timeLabel}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${event.htmlLink ? `<button type="button" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-pink-200 text-pink-600 hover:bg-pink-50 transition" data-open-calendar-event="${event.htmlLink}">
+                            <i data-lucide="external-link" class="w-4 h-4"></i>
+                            Open in Calendar
+                        </button>` : ''}
+                    </div>
+                </header>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-50 border border-gray-100 rounded-lg p-4">
+                        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Location</p>
+                        <p class="text-sm font-medium text-gray-800">${event.location || 'Not specified'}</p>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-100 rounded-lg p-4">
+                        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Created / Updated</p>
+                        <p class="text-xs text-gray-600">Created: ${event.created ? formatDate(event.created) : '—'}</p>
+                        <p class="text-xs text-gray-600">Updated: ${event.updated ? formatDate(event.updated) : '—'}</p>
+                    </div>
+                </div>
+                ${description ? `<p class="mt-3 text-sm text-gray-600 leading-relaxed">${description}</p>` : ''}
+                ${attendees.length ? `<div class="mt-3 text-xs text-gray-500">Attendees: ${attendees.join(', ')}</div>` : ''}
+            </article>
+        `;
+    }).join('') : calendarError ? `
+        <div class="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-700">
+            <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+            <div>
+                <p class="text-sm font-semibold">Calendar Sync Warning</p>
+                <p class="text-sm">${calendarError}</p>
+                <p class="text-xs text-amber-600 mt-1">Deploy the cloud function and ensure the service account has access, then press Refresh.</p>
+            </div>
+        </div>
+    ` : calendarLoading ? `
+        <div class="flex justify-center py-12">
+            <div class="flex items-center gap-2 text-pink-600">
+                <svg class="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M4 12a8 8 0 0 1 8-8"></path></svg>
+                <span class="text-sm font-semibold">Loading Google Calendar events…</span>
+            </div>
+        </div>
+    ` : `
+        <div class="text-center py-12 border border-dashed border-pink-200 rounded-2xl bg-pink-50/40">
+            <p class="text-5xl mb-4 opacity-40">🗓️</p>
+            <h3 class="text-lg font-semibold text-gray-700">No Google Calendar Events Found</h3>
+            <p class="text-sm text-gray-500 mt-2">Try refreshing or check your calendar setup.</p>
+        </div>
+    `;
+
+    let mainContentHtml = '';
+    if (currentTab === 'walk-in') {
+        mainContentHtml = `
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div class="xl:col-span-2 space-y-6">
+                    <div class="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Recent Appointments</h3>
+                        <div class="space-y-4 max-h-[28rem] overflow-y-auto pr-1 custom-scroll">${bookingCardsHtml}</div>
+                    </div>
+                </div>
+                <div class="space-y-6">
+                    ${walkInFormHtml}
+                </div>
+            </div>
+        `;
+    } else if (currentTab === 'calendar') {
+        const calendarEmbedSectionHtml = GOOGLE_CALENDAR_EMBED_URL ? `
+            <section class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-800">Google Calendar</h3>
+                        <p class="text-xs text-gray-500">This is your live calendar. Sign in with the admin Google account to edit.</p>
+                    </div>
+                    <a href="${GOOGLE_CALENDAR_EMBED_URL}" target="_blank" rel="noopener" class="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-pink-200 text-pink-600 hover:bg-pink-50 transition">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                        Open in new tab
+                    </a>
+                </div>
+                <div class="relative bg-gray-100">
+                    <iframe 
+                        src="${GOOGLE_CALENDAR_EMBED_URL}"
+                        class="w-full h-[640px] border-0"
+                        frameborder="0"
+                        scrolling="no"
+                        loading="lazy"
+                        allowfullscreen
+                    ></iframe>
+                </div>
+            </section>
+        ` : `
+            <section class="bg-white border border-dashed border-pink-200 rounded-xl p-6 text-center shadow-sm">
+                <p class="text-5xl mb-4 opacity-40">🔐</p>
+                <h3 class="text-lg font-semibold text-gray-800">Embed URL Required</h3>
+                <p class="mt-2 text-sm text-gray-500 max-w-lg mx-auto">
+                    Set <code>window.__NAILEASE_CALENDAR_EMBED_URL__</code> to your Google Calendar embed link so the live calendar appears here. In Google Calendar, open settings ▶ Integrate calendar ▶ copy the iframe URL.
+                    If you keep the calendar private, make sure it is shared with the service account and the admin user signed in can edit events.
+                </p>
+            </section>
+        `;
+        mainContentHtml = `
+            <div class="space-y-6">
+                ${calendarEmbedSectionHtml}
+                <section class="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800">Google Calendar Sync</h3>
+                            <p class="text-sm text-gray-500">Events created via automatic sync or directly in Google Calendar.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" data-refresh-calendar class="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-pink-200 text-pink-600 hover:bg-pink-50 transition">
+                                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                Refresh
+                            </button>
+                            <a href="https://calendar.google.com/calendar/u/0/r" target="_blank" rel="noopener" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg bg-pink-600 text-white hover:bg-pink-700 transition">
+                                <i data-lucide="calendar" class="w-4 h-4"></i>
+                                Open Google Calendar
+                            </a>
+                        </div>
+                    </div>
+                    <div class="mt-6 space-y-4">${calendarEventsHtml}</div>
+                </section>
+            </div>
+        `;
+    } else {
+        mainContentHtml = `
+            <div class="space-y-6">
+                <section class="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <h3 class="text-lg font-semibold text-gray-800">Appointments (${filteredBookings.length})</h3>
+                        <div class="grid grid-cols-2 md:flex md:flex-row gap-2 w-full md:w-auto">
+                            ${statusFiltersHtml}
+                        </div>
+                    </div>
+                    <div class="mt-6 space-y-4">${bookingCardsHtml}</div>
+                </section>
+            </div>
+        `;
+    }
+
+    const appointmentsHtml = `
+        <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
+            <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
+                <div class="flex items-center space-x-4">
+                    <button class="flex items-center text-pink-600 hover:text-pink-700 transition" data-navigate-dashboard>
+                        <i data-lucide="arrow-left" class="w-6 h-6 mr-2"></i>
+                        <span class="text-lg font-bold">Back to Dashboard</span>
+                    </button>
+                    <h1 class="text-2xl font-extrabold text-gray-800">Appointments Management</h1>
+                </div>
+                <div class="flex gap-4">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-pink-600">${stats.total}</p>
+                        <p class="text-xs font-medium text-gray-500">Total</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-amber-500">${stats.pending}</p>
+                        <p class="text-xs font-medium text-gray-500">Pending</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-emerald-500">${stats.confirmed}</p>
+                        <p class="text-xs font-medium text-gray-500">Confirmed</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-sky-500">${stats.completed}</p>
+                        <p class="text-xs font-medium text-gray-500">Completed</p>
+                    </div>
+                    <div class="text-center hidden sm:block">
+                        <p class="text-2xl font-bold text-purple-500">${stats.calendarEvents}</p>
+                        <p class="text-xs font-medium text-gray-500">Calendar Events</p>
+                    </div>
+                </div>
+            </header>
+
+            <nav class="flex bg-white rounded-xl p-2 shadow-sm border border-gray-100">
+                ${['list', 'walk-in', 'calendar'].map(tab => {
+                    const isActive = currentTab === tab;
+                    const label = tab === 'list' ? 'Appointments' : tab === 'walk-in' ? 'Walk-in' : 'Calendar';
+                    return `<button data-appointments-tab="${tab}" class="flex-1 text-center py-2 px-4 rounded-lg font-medium ${isActive ? 'bg-pink-600 text-white shadow-md' : 'text-gray-600 hover:bg-pink-50'}">${label}</button>`;
+                }).join('')}
+            </nav>
+
+            <div class="mt-6">
+                ${mainContentHtml}
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = appointmentsHtml;
+    
+    // Initialize time inputs after rendering
+    setTimeout(() => {
+        if (typeof window.initializeTimeInputs === 'function') {
+            window.initializeTimeInputs();
+        }
+    }, 100);
+}
+
+export function attachAppointmentsListeners() {
+    const navigate = typeof window.setPage === 'function' ? window.setPage : null;
+    const setTab = typeof window.setAppointmentsTab === 'function' ? window.setAppointmentsTab : null;
+    const setStatusFilter = typeof window.setBookingStatusFilter === 'function' ? window.setBookingStatusFilter : null;
+    const updateBookingStatus = typeof window.updateBookingStatus === 'function' ? window.updateBookingStatus : null;
+    const createWalkInBooking = typeof window.createWalkInBooking === 'function' ? window.createWalkInBooking : null;
+
+    document.querySelector('[data-navigate-dashboard]')?.addEventListener('click', () => {
+        navigate?.('dashboard');
+    });
+
+    document.querySelectorAll('[data-appointments-tab]').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabValue = button.getAttribute('data-appointments-tab');
+            if (setTab) {
+                setTab(tabValue);
+            } else {
+                navigate?.('appointments', tabValue);
+            }
+        });
+    });
+
+    document.querySelectorAll('[data-status-filter]').forEach(button => {
+        button.addEventListener('click', () => {
+            const filterValue = button.getAttribute('data-status-filter');
+            setStatusFilter?.(filterValue);
+        });
+    });
+
+    document.querySelectorAll('.appointment-status-form').forEach(form => {
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            const bookingId = form.getAttribute('data-booking-id');
+            const statusSelect = form.querySelector('select[name="status"]');
+            if (bookingId && statusSelect) {
+                updateBookingStatus?.(bookingId, statusSelect.value);
+            }
+        });
+    });
+
+    const walkInForm = document.getElementById('walkInForm');
+    if (walkInForm) {
+        walkInForm.addEventListener('submit', event => {
+            event.preventDefault();
+            const formData = new FormData(walkInForm);
+            const payload = Object.fromEntries(formData.entries());
+            
+            // Validate time format to ensure it's on the hour (e.g., 10:00, not 10:20)
+            const timeParts = payload.selectedTime.split(':');
+            if (timeParts.length === 2 && parseInt(timeParts[1], 10) !== 0) {
+                alert('Please select a time that is on the hour (e.g., 10:00, 11:00). Minutes must be "00".');
+                return;
+            }
+            
+            createWalkInBooking?.(payload);
+            walkInForm.reset();
+        });
+    }
+
+    document.querySelector('[data-refresh-calendar]')?.addEventListener('click', async () => {
+        if (typeof window.refreshCalendarEvents === 'function') {
+            await window.refreshCalendarEvents(true);
+        }
+    });
+
+    document.querySelectorAll('[data-open-calendar-event]').forEach(button => {
+        button.addEventListener('click', () => {
+            const link = button.getAttribute('data-open-calendar-event');
+            if (link) {
+                window.open(link, '_blank', 'noopener,noreferrer');
+            }
+        });
+    });
+    
+    // Initialize time inputs when appointments page loads
+    setTimeout(() => {
+        if (typeof window.initializeTimeInputs === 'function') {
+            window.initializeTimeInputs();
+        }
+    }, 100);
+}
+
 export function renderAdminLayout(container, user) {
     const adminName = user.displayName || 'Admin';
     const adminEmail = user.email || 'No Email';
@@ -404,21 +1039,21 @@ export function renderAdminLayout(container, user) {
 
     const adminHTML = `
        <header class="sticky top-0 bg-white shadow-md z-50">
-            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                <a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
-                
-                <div class="hidden sm:flex space-x-4 items-center">
-                                        <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
-                    
-                    <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
-                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
-                    
-                                        <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
-                    
-                    <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
-                </div>
-            </div>
-        </header>
+<div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+<a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+
+<div class="hidden sm:flex space-x-4 items-center">
+<a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
+
+<a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+<a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
+
+<a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
+
+<button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
+</div>
+ </div>
+ </header>
 
         <div class="text-center py-8 bg-white border-b border-gray-100">
             <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800">Admin Dashboard</h1>
@@ -549,6 +1184,9 @@ export function renderAdminLayout(container, user) {
  */
 
 export function attachAdminDashboardListeners(logoutUser, user, setPage, updateProfile) {
+        const navigate = typeof setPage === 'function' ? setPage : window.setPage;
+        const setStatusFilter = typeof window.setBookingStatusFilter === 'function' ? window.setBookingStatusFilter : null;
+        const setAppointmentsTab = typeof window.setAppointmentsTab === 'function' ? window.setAppointmentsTab : null;
         // Function to SHOW the modal
         const showModal = (id) => {const modal = document.getElementById(id);
             if (modal) {
@@ -593,7 +1231,7 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
         };
 
         document.getElementById('logoutBtn')?.addEventListener('click', logoutUser); 
-        document.getElementById('manageContentBtn')?.addEventListener('click', () => setPage('manage')); 
+        document.getElementById('manageContentBtn')?.addEventListener('click', () => navigate?.('manage')); 
 
         // Edit Profile Button
         document.getElementById('editProfileBtn')?.addEventListener('click', () => {
@@ -680,5 +1318,32 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
 
         // Placeholder console logs for other buttons
         document.getElementById('manageReviewBtn')?.addEventListener('click', () => console.log('Review Management Opened'));
-        document.getElementById('manageAppointmentsBtn')?.addEventListener('click', () => console.log('Appointments Management Opened'));
+        document.getElementById('manageAppointmentsBtn')?.addEventListener('click', () => navigate?.('appointments'));
+        document.getElementById('addWalkInBtn')?.addEventListener('click', () => {
+            if (setAppointmentsTab) {
+                setAppointmentsTab('walk-in');
+            } else {
+                navigate?.('appointments', 'walk-in');
+            }
+        });
+        document.getElementById('viewCalendarBtn')?.addEventListener('click', () => {
+            if (setAppointmentsTab) {
+                setAppointmentsTab('calendar');
+            } else {
+                navigate?.('appointments', 'calendar');
+            }
+        });
+        document.getElementById('pendingBookingsBtn')?.addEventListener('click', () => {
+            if (navigate) {
+                navigate('appointments', 'list');
+            }
+            setStatusFilter?.('pending');
+        });
+        
+        // Initialize time inputs when admin dashboard loads
+        setTimeout(() => {
+            if (typeof window.initializeTimeInputs === 'function') {
+                window.initializeTimeInputs();
+            }
+        }, 100);
 }
