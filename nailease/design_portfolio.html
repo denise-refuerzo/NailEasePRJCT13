@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCAC NailEase - Design Portfolio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> 
+    <style>
+            body {
+                    font-family: 'Inter', sans-serif;
+                background-color: #f7f9fb;
+                min-height: 100vh;
+            }
+        /* Custom styles for the responsive grid cards */
+            .design-grid {
+                display: grid;
+                gap: 10px; /* Tailwind's gap-4 */
+                grid-auto-rows: 1fr; /* Mobile: 2 columns */
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            @media (min-width: 640px) { /* sm breakpoint (Tablet: 3 columns) */
+                .design-grid { 
+                    grid-template-columns: repeat(3, minmax(0, 1fr)); 
+                }
+            }
+            @media (min-width: 1024px) { 
+                /* lg breakpoint (Desktop: 5 columns for 5x4) */
+                .design-grid { 
+                    /* Force 5 equal columns */
+                    grid-template-columns: repeat(5, 1fr); 
+                    
+                    /* CRITICAL FIXES FOR ALIGNMENT */
+                    /* Ensure alignment starts at the left edge and fills the column space */
+                   justify-content: start; 
+                    
+                    /* Stretch items horizontally to fully occupy their grid track */
+                    align-items: stretch;
+                    
+                    /* Ensure the columns take up all available horizontal space */
+                    width: 100%; 
+                }
+                
+            }
+        </style>
+</head>
+<body>
+    <div id="app-content">
+    </div>
+
+    <script type="module" src="./design_portfolio_logic.js"></script>
+</body>
+</html>

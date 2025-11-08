@@ -57,6 +57,21 @@ function changeDesign() {
 let currentDate = new Date();
 let selectedDate = null;
 
+// Helper function to format date string (YYYY-MM-DD) to readable format without timezone issues
+function formatDateString(dateString) {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    // Create date at noon to avoid timezone edge cases, then use it only for day of week
+    const date = new Date(year, month - 1, day, 12, 0, 0);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const dayName = dayNames[date.getDay()];
+    const monthName = monthNames[month - 1]; // Use month from dateString directly (1-indexed)
+    // Use day from dateString directly, not from Date object
+    return `${dayName}, ${monthName} ${day}, ${year}`;
+}
+
 // Unavailable dates (example data - in production, fetch from backend)
 const unavailableDates = [
     '2024-12-25', '2024-12-31', '2025-01-01', '2024-12-22', '2024-12-29'
@@ -96,7 +111,8 @@ function generateCalendar() {
             const day = currentDateObj.getDate();
             const currentMonth = currentDateObj.getMonth();
             const currentYear = currentDateObj.getFullYear();
-            const dateString = currentDateObj.toISOString().split('T')[0];
+            // Format date as YYYY-MM-DD without timezone conversion to avoid date offset issues
+            const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             
             const isCurrentMonth = currentMonth === month && currentYear === year;
             const isPast = currentDateObj < today;
@@ -149,13 +165,8 @@ function selectDate(dateString) {
     selectedDate = dateString;
     bookingData.selectedDate = dateString;
     
-    const date = new Date(dateString);
-    const formattedDate = date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-    });
+    // Format date string without timezone conversion to avoid date offset
+    const formattedDate = formatDateString(dateString);
     document.getElementById('selectedDateDisplay').textContent = formattedDate;
     
     generateTimeSlots(dateString);
@@ -708,12 +719,7 @@ function updatePaymentSummary() {
     
     document.getElementById('paymentDesignName').textContent = bookingData.design.name;
     document.getElementById('paymentDate').textContent = 
-        bookingData.selectedDate ? new Date(bookingData.selectedDate).toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-        }) : '-';
+        bookingData.selectedDate ? formatDateString(bookingData.selectedDate) : '-';
     document.getElementById('paymentTime').textContent = bookingData.selectedTime || '-';
     document.getElementById('reservationAmount').textContent = `₱${reservationFee.toFixed(2)}`;
 }
@@ -830,13 +836,8 @@ async function completeBooking() {
     
     document.getElementById('bookingId').textContent = '#' + bookingId;
     document.getElementById('summaryDesign').textContent = bookingData.design.name;
-    document.getElementById('summaryDate').textContent = 
-        new Date(bookingData.selectedDate).toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-        });
+    // Format date string without timezone conversion to avoid date offset
+    document.getElementById('summaryDate').textContent = formatDateString(bookingData.selectedDate);
     document.getElementById('summaryTime').textContent = bookingData.selectedTime;
     document.getElementById('summaryTotal').textContent = `₱${bookingData.design.price.toFixed(2)}`;
     document.getElementById('summaryPaid').textContent = `₱${reservationFee.toFixed(2)}`;
@@ -933,6 +934,16 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeFromURL();
     generateCalendar();
     showStep(currentStep);
+    
+    // Scroll to step1 if hash is present
+    if (window.location.hash === '#step1') {
+        setTimeout(() => {
+            const step1Element = document.getElementById('step1');
+            if (step1Element) {
+                step1Element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+    }
     
     // Attach button event listeners directly (backup for onclick handlers)
     const nextBtn = document.getElementById('nextBtn');

@@ -1040,12 +1040,12 @@ export function renderAdminLayout(container, user) {
     const adminHTML = `
        <header class="sticky top-0 bg-white shadow-md z-50">
 <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-<a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+<a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
 
 <div class="hidden sm:flex space-x-4 items-center">
 <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
 
-<a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+<a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
 <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
 
 <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
