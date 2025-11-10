@@ -3,11 +3,13 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"; 
 import { getFirestore, doc, getDoc, setDoc, collection, serverTimestamp,addDoc, deleteDoc, getDocs, query, orderBy, writeBatch
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; 
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
 // Import the layout renderer and listener attachment function
 import { renderClientLayout, attachClientDashboardListeners } from "./client_dashboard_layout.js"; 
 import { renderAdminLayout, attachAdminDashboardListeners, renderManageView, renderAppointmentsLayout, attachAppointmentsListeners, renderReceiptsLayout, attachReceiptsListeners, renderQRLayout, attachQRListeners } from "./admin_dashboard_layout.js"; 
 import { renderLoading, hideLoading, showContainer, hideContainer } from "./ui_manager.js";
+import { renderReviewManagementLayout, attachReviewManagementListeners } from "./admin_dashboard_layout.js";
 
 
 // firebase config and init
@@ -1011,6 +1013,9 @@ function renderApp(user, clientData) {
         } else if (state.currentPage === 'qr') {
             renderQRLayout(appContent, user, state);
             attachQRListeners();
+        } else if (state.currentPage === 'reviews') {
+            renderReviewManagementLayout(appContent, user, state);
+            attachReviewManagementListeners();
         } else {
             renderAdminLayout(appContent, user); 
             attachAdminDashboardListeners(logoutUser, user); 

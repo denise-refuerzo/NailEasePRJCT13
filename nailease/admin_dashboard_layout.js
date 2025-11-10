@@ -1,6 +1,7 @@
 import { updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline, saveQRCode, deleteQRCode 
 } from './auth-logic.js';
+import { getAllReviews, deleteReview, getExternalReviewPhotos, uploadExternalReviewPhoto, deleteExternalReviewPhoto } from './review-logic.js';
 
 //pagination per page
 const DESIGNS_PER_PAGE = 3; 
@@ -1886,6 +1887,9 @@ export function renderAdminLayout(container, user) {
 <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
 
 <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+<a href="book.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Book</a>
+<a href="feedback.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Feedback</a>
+<a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150">About us</a>
 <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
 
 <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
@@ -1956,7 +1960,7 @@ export function renderAdminLayout(container, user) {
                     </div>
 
                     <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition duration-300">
-                        <div class="flex justify-between items-center mb-4"><div class="flex items-center"><span class="text-2xl mr-2 text-pink-600">⭐</span><h3 class="text-lg font-semibold text-gray-800">Review Management</h3></div><button id="manageReviewBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button></div>
+                        <div class="flex justify-between items-center mb-4"><div class="flex items-center"><span class="text-2xl mr-2 text-pink-600">⭐</span><h3 class="text-lg font-semibold text-gray-800">Review Management</h3></div><button id="manageReviewBtn" onclick="window.setPage('reviews')" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button></div>
                         <p class="text-sm text-gray-500 mb-4">Manage client reviews, add photos to testimonials, and moderate review content.</p>
                         <div class="flex flex-wrap gap-2">
                             <button id="addReviewPhotosBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Add Photos</button>
@@ -2211,4 +2215,390 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
                 window.initializeTimeInputs();
             }
         }, 100);
+}
+
+export function renderReviewManagementLayout(container, user, state) {
+    const currentTab = state.reviewsTab || 'system';
+    
+    const reviewsHTML = `
+        <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
+            <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
+                <div class="flex items-center space-x-4">
+                    <button onclick="window.setPage('dashboard')" class="flex items-center text-pink-600 hover:text-pink-700 transition">
+                        <i data-lucide="arrow-left" class="w-6 h-6 mr-2"></i>
+                        <span class="text-lg font-bold">Back to Dashboard</span>
+                    </button>
+                    <h1 class="text-2xl font-extrabold text-gray-800">Review Management</h1>
+                </div>
+            </header>
+
+            <!-- Tabs -->
+            <div class="bg-white rounded-xl shadow-lg">
+                <div class="flex border-b border-gray-200">
+                    <button id="systemReviewsTab" class="tab-btn px-6 py-4 font-semibold text-sm transition ${currentTab === 'system' ? 'text-pink-600 border-b-2 border-pink-600' : 'text-gray-600 hover:text-pink-600'}" data-tab="system">
+                        System Reviews
+                    </button>
+                    <button id="externalPhotosTab" class="tab-btn px-6 py-4 font-semibold text-sm transition ${currentTab === 'external' ? 'text-pink-600 border-b-2 border-pink-600' : 'text-gray-600 hover:text-pink-600'}" data-tab="external">
+                        External Review Photos
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Reviews Tab Content -->
+            <div id="systemReviewsContent" class="tab-content ${currentTab === 'system' ? '' : 'hidden'}">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Client Reviews from System</h2>
+                    <p class="text-gray-600 mb-6">Manage reviews submitted by clients through the booking system.</p>
+                    <div id="systemReviewsList" class="space-y-4">
+                        <div class="text-center py-8 text-gray-500">
+                            <div class="text-4xl mb-2">⏳</div>
+                            <p>Loading reviews...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- External Review Photos Tab Content -->
+            <div id="externalPhotosContent" class="tab-content ${currentTab === 'external' ? '' : 'hidden'}">
+                <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">External Review Photos</h2>
+                    <p class="text-gray-600 mb-6">Add photos of reviews from other social media platforms (Facebook, Instagram, etc.)</p>
+                    
+                    <!-- Upload Section -->
+                    <div class="border-2 border-dashed border-pink-300 rounded-xl p-8 text-center mb-6 bg-pink-50/50">
+                        <input type="file" id="externalPhotoUpload" accept="image/*" class="hidden" />
+                        <div class="text-4xl mb-4">📷</div>
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Upload Review Photo</h3>
+                        <p class="text-sm text-gray-600 mb-4">Click to upload a photo of a review from another platform</p>
+                        <button id="uploadExternalPhotoBtn" class="px-6 py-3 bg-pink-600 hover:bg-pink-700 text-white font-semibold rounded-lg transition shadow-md">
+                            Choose Photo
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2">Max file size: 5MB. Supported formats: JPG, PNG</p>
+                    </div>
+
+                    <!-- Photos Grid -->
+                    <div id="externalPhotosGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div class="text-center py-8 text-gray-500">
+                            <div class="text-4xl mb-2">⏳</div>
+                            <p>Loading photos...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = reviewsHTML;
+}
+
+export async function attachReviewManagementListeners() {
+    // Tab switching
+    const systemTab = document.getElementById('systemReviewsTab');
+    const externalTab = document.getElementById('externalPhotosTab');
+    const systemContent = document.getElementById('systemReviewsContent');
+    const externalContent = document.getElementById('externalPhotosContent');
+
+    if (systemTab && externalTab) {
+        systemTab.addEventListener('click', () => {
+            systemTab.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
+            systemTab.classList.remove('text-gray-600');
+            externalTab.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+            externalTab.classList.add('text-gray-600');
+            systemContent.classList.remove('hidden');
+            externalContent.classList.add('hidden');
+            loadSystemReviews();
+        });
+
+        externalTab.addEventListener('click', () => {
+            externalTab.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
+            externalTab.classList.remove('text-gray-600');
+            systemTab.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+            systemTab.classList.add('text-gray-600');
+            externalContent.classList.remove('hidden');
+            systemContent.classList.add('hidden');
+            loadExternalPhotos();
+        });
+    }
+
+    // Upload external photo
+    const uploadBtn = document.getElementById('uploadExternalPhotoBtn');
+    const fileInput = document.getElementById('externalPhotoUpload');
+    
+    if (uploadBtn && fileInput) {
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.size > 5 * 1024 * 1024) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'File Too Large',
+                        text: 'Please upload an image smaller than 5MB.',
+                    });
+                    return;
+                }
+
+                if (!file.type.startsWith('image/')) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Invalid File Type',
+                        text: 'Please upload an image file (JPG, PNG, etc.).',
+                    });
+                    return;
+                }
+
+                try {
+                    Swal.fire({
+                        title: 'Uploading...',
+                        text: 'Please wait while we upload the photo.',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    await uploadExternalReviewPhoto(file);
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Photo uploaded successfully.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+
+                    fileInput.value = '';
+                    await loadExternalPhotos();
+                } catch (error) {
+                    console.error('Error uploading photo:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Upload Failed',
+                        text: error.message || 'Failed to upload photo. Please try again.',
+                    });
+                }
+            }
+        });
+    }
+
+    // Load initial data
+    const currentTab = document.getElementById('systemReviewsTab')?.classList.contains('text-pink-600') ? 'system' : 'external';
+    if (currentTab === 'system') {
+        loadSystemReviews();
+    } else {
+        loadExternalPhotos();
+    }
+}
+
+// Load system reviews
+async function loadSystemReviews() {
+    try {
+        const reviews = await getAllReviews('all');
+        const container = document.getElementById('systemReviewsList');
+        
+        if (!container) return;
+
+        if (reviews.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-12 text-gray-500">
+                    <div class="text-5xl mb-4">⭐</div>
+                    <h3 class="text-xl font-bold text-gray-700 mb-2">No Reviews Yet</h3>
+                    <p>No reviews have been submitted by clients yet.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const reviewsHTML = reviews.map(review => {
+            const stars = '⭐'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+            const reviewDate = review.createdAt instanceof Date ? review.createdAt : new Date(review.createdAt);
+            
+            return `
+                <div class="border border-gray-200 rounded-xl p-6 hover:shadow-md transition">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="text-2xl">${stars}</div>
+                                <span class="text-sm text-gray-500">${reviewDate.toLocaleDateString()}</span>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-2">By: ${review.userName || 'Anonymous'}</p>
+                            <p class="text-gray-700 mb-4">${review.text}</p>
+                            ${review.imageUrls && review.imageUrls.length > 0 ? `
+                                <div class="grid grid-cols-2 gap-2 mb-4">
+                                    ${review.imageUrls.map(url => `
+                                        <img src="${url}" alt="Review photo" class="w-full h-32 object-cover rounded-lg shadow-sm" />
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <button class="delete-review-btn ml-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition shadow-md" data-review-id="${review.id}">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = reviewsHTML;
+
+        // Attach delete listeners
+        document.querySelectorAll('.delete-review-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const reviewId = e.target.dataset.reviewId;
+                
+                const result = await Swal.fire({
+                    title: 'Delete Review?',
+                    text: 'Are you sure you want to delete this review? This action cannot be undone.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel'
+                });
+
+                if (result.isConfirmed) {
+                    try {
+                        Swal.fire({
+                            title: 'Deleting...',
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        await deleteReview(reviewId);
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Deleted!',
+                            text: 'Review has been deleted successfully.',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+
+                        await loadSystemReviews();
+                    } catch (error) {
+                        console.error('Error deleting review:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Delete Failed',
+                            text: error.message || 'Failed to delete review. Please try again.',
+                        });
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error loading system reviews:', error);
+        const container = document.getElementById('systemReviewsList');
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center py-12 text-red-500">
+                    <div class="text-5xl mb-4">⚠️</div>
+                    <h3 class="text-xl font-bold mb-2">Error Loading Reviews</h3>
+                    <p>${error.message || 'Failed to load reviews. Please try again.'}</p>
+                </div>
+            `;
+        }
+    }
+}
+
+// Load external photos
+async function loadExternalPhotos() {
+    try {
+        const photos = await getExternalReviewPhotos();
+        const container = document.getElementById('externalPhotosGrid');
+        
+        if (!container) return;
+
+        if (photos.length === 0) {
+            container.innerHTML = `
+                <div class="col-span-full text-center py-12 text-gray-500">
+                    <div class="text-5xl mb-4">📷</div>
+                    <h3 class="text-xl font-bold text-gray-700 mb-2">No Photos Yet</h3>
+                    <p>Upload photos of reviews from other platforms to display here.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const photosHTML = photos.map(photo => `
+            <div class="relative group">
+                <img src="${photo.imageUrl}" alt="External review" class="w-full h-64 object-cover rounded-xl shadow-md hover:shadow-lg transition" />
+                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition rounded-xl flex items-center justify-center">
+                    <button class="delete-external-photo-btn opacity-0 group-hover:opacity-100 px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition shadow-md" data-photo-id="${photo.id}" data-photo-url="${photo.imageUrl}">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = photosHTML;
+
+        // Attach delete listeners
+        document.querySelectorAll('.delete-external-photo-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const photoId = e.target.dataset.photoId;
+                const photoUrl = e.target.dataset.photoUrl;
+                
+                const result = await Swal.fire({
+                    title: 'Delete Photo?',
+                    text: 'Are you sure you want to delete this photo? This action cannot be undone.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel'
+                });
+
+                if (result.isConfirmed) {
+                    try {
+                        Swal.fire({
+                            title: 'Deleting...',
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        await deleteExternalReviewPhoto(photoId, photoUrl);
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Deleted!',
+                            text: 'Photo has been deleted successfully.',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+
+                        await loadExternalPhotos();
+                    } catch (error) {
+                        console.error('Error deleting photo:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Delete Failed',
+                            text: error.message || 'Failed to delete photo. Please try again.',
+                        });
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error loading external photos:', error);
+        const container = document.getElementById('externalPhotosGrid');
+        if (container) {
+            container.innerHTML = `
+                <div class="col-span-full text-center py-12 text-red-500">
+                    <div class="text-5xl mb-4">⚠️</div>
+                    <h3 class="text-xl font-bold mb-2">Error Loading Photos</h3>
+                    <p>${error.message || 'Failed to load photos. Please try again.'}</p>
+                </div>
+            `;
+        }
+    }
 }
