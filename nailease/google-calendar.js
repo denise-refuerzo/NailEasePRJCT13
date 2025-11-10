@@ -5,24 +5,35 @@
  * This is a client-side approach that doesn't require OAuth setup
  */
 function createGoogleCalendarEvent(bookingData) {
-    const { selectedDate, selectedTime, design, personalInfo, bookingId } = bookingData;
+    const { selectedDate, selectedTime, design, personalInfo, bookingId, notes } = bookingData;
     
     // Parse date and time
     const date = new Date(selectedDate);
-    const [time, period] = selectedTime.split(' ');
-    const [hours, minutes] = time.split(':');
+    let hour24, minutes;
     
-    // Convert to 24-hour format
-    let hour24 = parseInt(hours);
-    if (period === 'PM' && hour24 !== 12) {
-        hour24 += 12;
-    } else if (period === 'AM' && hour24 === 12) {
-        hour24 = 0;
+    // Handle both 12-hour format (e.g., "10:00 AM") and 24-hour format (e.g., "10:00")
+    if (selectedTime.includes('AM') || selectedTime.includes('PM')) {
+        // 12-hour format
+        const [time, period] = selectedTime.split(' ');
+        const [hours, mins] = time.split(':');
+        hour24 = parseInt(hours);
+        minutes = parseInt(mins || '0');
+        
+        if (period === 'PM' && hour24 !== 12) {
+            hour24 += 12;
+        } else if (period === 'AM' && hour24 === 12) {
+            hour24 = 0;
+        }
+    } else {
+        // 24-hour format (e.g., "10:00")
+        const [hours, mins] = selectedTime.split(':');
+        hour24 = parseInt(hours);
+        minutes = parseInt(mins || '0');
     }
     
     // Set start time
     const startDateTime = new Date(date);
-    startDateTime.setHours(hour24, parseInt(minutes), 0, 0);
+    startDateTime.setHours(hour24, minutes, 0, 0);
     
     // End time is 1 hour after start (adjustable)
     const endDateTime = new Date(startDateTime);
@@ -44,16 +55,29 @@ function createGoogleCalendarEvent(bookingData) {
     
     // Create event details
     const eventTitle = encodeURIComponent(`Nail Appointment - ${design.name}`);
-    const eventDetails = encodeURIComponent(
-        `Booking ID: ${bookingId}\n\n` +
-        `Design: ${design.name}\n` +
-        `Client: ${personalInfo.fullName}\n` +
-        `Phone: ${personalInfo.phone}\n` +
-        `Email: ${personalInfo.email || 'Not provided'}\n\n` +
-        `Total Amount: ₱${design.price.toFixed(2)}\n` +
-        `Reservation Fee: ₱${(design.price / 2).toFixed(2)}\n\n` +
-        `Please arrive on time for your appointment.`
-    );
+    const detailsParts = [
+        `Booking ID: ${bookingId}`,
+        '',
+        `Design: ${design.name}`,
+        `Client: ${personalInfo.fullName}`,
+        `Phone: ${personalInfo.phone}`,
+        `Email: ${personalInfo.email || 'Not provided'}`,
+        ''
+    ];
+    
+    if (design.price && design.price > 0) {
+        detailsParts.push(`Total Amount: ₱${Number(design.price).toFixed(2)}`);
+    }
+    
+    if (notes) {
+        detailsParts.push('');
+        detailsParts.push(`Notes: ${notes}`);
+    }
+    
+    detailsParts.push('');
+    detailsParts.push('Please arrive on time for your appointment.');
+    
+    const eventDetails = encodeURIComponent(detailsParts.join('\n'));
     const eventLocation = encodeURIComponent('DCAC NailEase Studio');
     
     // Create Google Calendar URL

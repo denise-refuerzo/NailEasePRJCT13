@@ -513,12 +513,14 @@
                 <!-- Payment Details -->
                 <div class="text-center mt-8" id="paymentDetails">
                     <h3 class="text-xl font-bold mb-5">Scan QR Code to Pay</h3>
-                    <div class="w-48 h-48 bg-gray-100 border-2 border-gray-300 rounded-2xl mx-auto mb-6 flex items-center justify-center">
-                        <div class="text-center">
-                            <div class="text-4xl font-bold text-gray-400 mb-2">QR</div>
-                            <div class="text-sm text-gray-500">Code</div>
+                    <div class="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-2xl mx-auto mb-4 flex items-center justify-center relative overflow-hidden">
+                        <img id="paymentQrImage" src="" alt="Payment QR Code" class="hidden w-full h-full object-contain rounded-2xl">
+                        <div id="paymentQrPlaceholder" class="text-center px-4">
+                            <div class="text-3xl font-bold text-gray-400 mb-1">QR</div>
+                            <div id="paymentQrPlaceholderText" class="text-sm text-gray-500 leading-tight">No active QR code for the selected payment method.</div>
                         </div>
                     </div>
+                    <p id="paymentQrStatus" class="text-xs text-gray-500 mb-6 hidden">QR code last updated just now.</p>
                     
                     <div class="bg-pink-50 p-6 rounded-2xl mb-6 max-w-md mx-auto">
                         <div class="flex justify-between mb-3 pb-3 border-b">

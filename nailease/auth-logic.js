@@ -6,7 +6,7 @@ import { getFirestore, doc, getDoc, setDoc, collection, serverTimestamp,addDoc, 
 
 // Import the layout renderer and listener attachment function
 import { renderClientLayout, attachClientDashboardListeners } from "./client_dashboard_layout.js"; 
-import { renderAdminLayout, attachAdminDashboardListeners, renderManageView, renderAppointmentsLayout, attachAppointmentsListeners } from "./admin_dashboard_layout.js"; 
+import { renderAdminLayout, attachAdminDashboardListeners, renderManageView, renderAppointmentsLayout, attachAppointmentsListeners, renderReceiptsLayout, attachReceiptsListeners, renderQRLayout, attachQRListeners } from "./admin_dashboard_layout.js"; 
 import { renderLoading, hideLoading, showContainer, hideContainer } from "./ui_manager.js";
 
 
@@ -34,6 +34,7 @@ const VERIFY_OTP_URL = 'https://us-central1-nailease25.cloudfunctions.net/verify
 const DESIGNS_COLLECTION = `content/${APP_ID}/designs`;
 const GALLERY_COLLECTION = `content/${APP_ID}/gallery`;
 const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+const QR_COLLECTION = `content/${APP_ID}/qrCodes`;
 const LIST_CALENDAR_EVENTS_URL = 'https://us-central1-nailease25.cloudfunctions.net/listCalendarEvents';
 
 
@@ -166,6 +167,7 @@ export const state = {
     designs: [], 
     gallery: [], 
     bookings: [],
+    qrCodes: [],
     calendarEvents: [],
     calendarEventsLoaded: false,
     calendarEventsLoading: false,
@@ -234,10 +236,15 @@ async function fetchContent() {
         const designsSnapshot = await getDocs(designsQuery);
         state.designs = designsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Fetch Gallery (Promo and Credentials)
-        const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
-        const gallerySnapshot = await getDocs(galleryQuery);
-        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Fetch Gallery (Promo and Credentials)
+        const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
+        const gallerySnapshot = await getDocs(galleryQuery);
+        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Fetch QR Codes
+        const qrQuery = query(collection(db, QR_COLLECTION), orderBy('timestamp', 'desc'));
+        const qrSnapshot = await getDocs(qrQuery);
+        state.qrCodes = qrSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         // Fetch Bookings (Admin Appointments)
         const bookingsQuery = query(collection(db, BOOKINGS_COLLECTION), orderBy('createdAt', 'desc'));
@@ -430,11 +437,91 @@ export async function deleteGalleryItem(id) {
                 'The gallery item has been deleted.',
                 'success'
             );
-        } catch (error) {
-            console.error("Error deleting gallery item:", error);
-            Swal.fire('Failed!', 'The item could not be deleted.', 'error');
-        }
-    }
+        } catch (error) {
+            console.error("Error deleting gallery item:", error);
+            Swal.fire('Failed!', 'The item could not be deleted.', 'error');
+        }
+    }
+}
+
+export async function saveQRCode(id, data) {
+    try {
+        const payload = {
+            name: (data.name || '').trim(),
+            imageUrl: data.imageUrl || null,
+            imageDataUrl: data.imageDataUrl || null,
+            originalFilename: data.originalFilename || null,
+            active: typeof data.active === 'boolean' ? data.active : true,
+            originalUrl: data.originalUrl || data.imageUrl || null,
+            timestamp: serverTimestamp()
+        };
+
+        if (id) {
+            await setDoc(getContentDocRef(QR_COLLECTION, id), payload, { merge: true });
+        } else {
+            await addDoc(collection(db, QR_COLLECTION), payload);
+        }
+        
+        window.checkAndSetRole(auth.currentUser);
+
+        // SWEETALERT SUCCESS NOTIFICATION
+        const action = id ? 'updated' : 'created';
+        Swal.fire({
+            icon: 'success',
+            title: 'Success!',
+            text: `QR Code "${data.name}" successfully ${action}.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
+
+    } catch (error) {
+        console.error("Error saving QR code:", error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Oops...',
+            text: 'Failed to save QR code. Check console.',
+        });
+    }
+}
+
+export async function toggleQRCodeActive(id, nextActive) {
+    try {
+        await setDoc(getContentDocRef(QR_COLLECTION, id), { active: !!nextActive, updatedAt: serverTimestamp() }, { merge: true });
+        window.checkAndSetRole(auth.currentUser);
+    } catch (error) {
+        console.error('Error toggling QR active state:', error);
+        Swal.fire('Failed!', 'Could not update QR status.', 'error');
+    }
+}
+
+// expose helpers
+window.toggleQRCodeActive = toggleQRCodeActive;
+
+export async function deleteQRCode(id) {
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            await deleteDoc(getContentDocRef(QR_COLLECTION, id));
+            window.checkAndSetRole(auth.currentUser);
+            Swal.fire(
+                'Deleted!',
+                'The QR code has been deleted.',
+                'success'
+            );
+        } catch (error) {
+            console.error("Error deleting QR code:", error);
+            Swal.fire('Failed!', 'The QR code could not be deleted.', 'error');
+        }
+    }
 } 
 
 export async function toggleActivePromo(id, isActive) { 
@@ -557,7 +644,7 @@ export async function deleteBooking(bookingId) {
         }
     }
 }
-
+//
 export async function createWalkInBooking(formData) {
     const {
         clientName,
@@ -583,6 +670,77 @@ export async function createWalkInBooking(formData) {
     }
 
     try {
+        // Convert time from 24-hour format (08:00) to 12-hour format (8:00 AM) to match user bookings
+        let formattedTime = selectedTime;
+        if (selectedTime && !selectedTime.includes('AM') && !selectedTime.includes('PM')) {
+            // It's in 24-hour format, convert to 12-hour format
+            const [hours, minutes] = selectedTime.split(':');
+            const hour24 = parseInt(hours, 10);
+            let hour12 = hour24;
+            let period = 'AM';
+            
+            if (hour24 === 0) {
+                hour12 = 12;
+                period = 'AM';
+            } else if (hour24 === 12) {
+                hour12 = 12;
+                period = 'PM';
+            } else if (hour24 > 12) {
+                hour12 = hour24 - 12;
+                period = 'PM';
+            } else {
+                hour12 = hour24;
+                period = 'AM';
+            }
+            
+            formattedTime = `${hour12}:00 ${period}`;
+        }
+        
+        // Check for duplicate appointments BEFORE saving (use formatted time)
+        const { query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const duplicateQuery = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', selectedDate),
+            where('selectedTime', '==', formattedTime)
+        );
+        const duplicateSnapshot = await getDocs(duplicateQuery);
+        
+        const existingBookings = [];
+        duplicateSnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Only consider non-cancelled appointments as conflicts
+            if (data.status !== 'cancelled') {
+                existingBookings.push(data);
+            }
+        });
+        
+        if (existingBookings.length > 0) {
+            const existingBooking = existingBookings[0];
+            Swal.fire({
+                icon: 'warning',
+                title: 'Time Slot Already Booked',
+                html: `
+                    <div style="text-align: left; padding: 10px 0;">
+                        <p style="margin-bottom: 15px; color: #333;">
+                            This time slot is already booked:
+                        </p>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                            <p style="margin: 5px 0;"><strong>Date:</strong> ${selectedDate}</p>
+                            <p style="margin: 5px 0;"><strong>Time:</strong> ${formattedTime}</p>
+                            <p style="margin: 5px 0;"><strong>Booked by:</strong> ${existingBooking.clientName || 'Unknown'}</p>
+                            <p style="margin: 5px 0;"><strong>Status:</strong> ${existingBooking.status || 'pending'}</p>
+                        </div>
+                        <p style="color: #666; font-size: 14px;">
+                            Please select a different date and time.
+                        </p>
+                    </div>
+                `,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#ec4899'
+            });
+            return;
+        }
+        
         // --- REMOVED RESERVATION FEE LOGIC ---
         // const reservationFee = formData.reservationFee ? Number(formData.reservationFee) : 0;
         const totalAmount = formData.totalAmount ? Number(formData.totalAmount) : 0;
@@ -594,7 +752,7 @@ export async function createWalkInBooking(formData) {
             clientPhone,
             clientEmail,
             selectedDate,
-            selectedTime,
+            selectedTime: formattedTime, // Use converted 12-hour format to match user bookings
             designName,
             status: 'confirmed',
             source: 'walk-in',
@@ -608,12 +766,96 @@ export async function createWalkInBooking(formData) {
 
         await addDoc(collection(db, BOOKINGS_COLLECTION), payload);
 
+        // Prepare booking data for Google Calendar (use formatted time)
+        const calendarBookingData = {
+            selectedDate,
+            selectedTime: formattedTime, // Use converted 12-hour format
+            design: {
+                name: designName,
+                price: totalAmount
+            },
+            personalInfo: {
+                fullName: clientName,
+                phone: clientPhone,
+                email: clientEmail
+            },
+            bookingId,
+            notes,
+            source: 'walk-in' // Mark as walk-in booking
+        };
+
+        // Automatically create calendar event in admin's Google Calendar
+        let calendarEventCreated = false;
+        if (typeof window.createAdminCalendarEvent === 'function') {
+            try {
+                const calendarResult = await window.createAdminCalendarEvent(calendarBookingData);
+                if (calendarResult && calendarResult.success) {
+                    calendarEventCreated = true;
+                    console.log('Walk-in appointment added to Google Calendar:', calendarResult.eventLink);
+                } else {
+                    console.warn('Calendar event creation failed:', calendarResult?.message);
+                }
+            } catch (error) {
+                console.error('Error creating calendar event for walk-in:', error);
+            }
+        }
+
+        // Show success message with Google Calendar status
+        const calendarStatusHtml = calendarEventCreated 
+            ? `<div style="background: #d1fae5; border: 2px solid #10b981; padding: 12px; border-radius: 8px; margin: 15px 0;">
+                <p style="color: #065f46; font-weight: 600; margin: 0;">
+                    ✅ Added to Google Calendar successfully!
+                </p>
+            </div>`
+            : `<div style="background: #fef3c7; border: 2px solid #f59e0b; padding: 12px; border-radius: 8px; margin: 15px 0;">
+                <p style="color: #92400e; margin: 0;">
+                    ⚠️ Calendar event not created. You can add it manually below.
+                </p>
+            </div>`;
+        
         Swal.fire({
             icon: 'success',
-            title: 'Walk-in Added',
-            text: `${clientName}'s appointment has been recorded.`,
-            showConfirmButton: false,
-            timer: 1500
+            title: 'Walk-in Appointment Saved!',
+            html: `
+                <div style="text-align: center; padding: 10px 0;">
+                    <p style="margin-bottom: 20px; font-size: 16px; color: #333;">
+                        <strong>${clientName}'s</strong> appointment has been recorded successfully.
+                    </p>
+                    ${calendarStatusHtml}
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; margin: 20px 0;">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" style="margin: 0 auto 10px; display: block;">
+                            <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zm0-13H5V6h14v1z"/>
+                            <path d="M7 11h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm-8 4h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"/>
+                        </svg>
+                        <p style="color: white; font-weight: 600; margin: 0; font-size: 18px;">
+                            Add to Google Calendar
+                        </p>
+                        <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0; font-size: 13px;">
+                            Click below to open Google Calendar with appointment details
+                        </p>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '<i class="fa fa-calendar"></i> Go to Google Calendar',
+            cancelButtonText: 'Close',
+            confirmButtonColor: '#4285f4',
+            cancelButtonColor: '#6c757d',
+            reverseButtons: true,
+            width: '500px'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Open Google Calendar with pre-filled event details
+                if (typeof window.addToGoogleCalendar === 'function') {
+                    window.addToGoogleCalendar(calendarBookingData);
+                } else {
+                    // Fallback: create URL directly if function not available
+                    const calendarUrl = window.createGoogleCalendarEvent 
+                        ? window.createGoogleCalendarEvent(calendarBookingData)
+                        : `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Nail Appointment - ${designName}`)}&dates=${new Date(selectedDate).toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${new Date(new Date(selectedDate).getTime() + 60 * 60 * 1000).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+                    window.open(calendarUrl, '_blank');
+                }
+            }
         });
 
         setTimeout(() => window.checkAndSetRole(auth.currentUser), 400);
@@ -623,7 +865,7 @@ export async function createWalkInBooking(formData) {
         Swal.fire('Failed!', 'Could not save walk-in booking.', 'error');
     }
 }
-
+//
 async function refreshCalendarEvents(force = false) {
     const user = auth.currentUser;
     const isAdmin = user && user.uid === ADMIN_UID;
@@ -763,6 +1005,12 @@ function renderApp(user, clientData) {
         } else if (state.currentPage === 'appointments') {
             renderAppointmentsLayout(appContent, user, state);
             attachAppointmentsListeners();
+        } else if (state.currentPage === 'receipts') {
+            renderReceiptsLayout(appContent, user, state);
+            attachReceiptsListeners();
+        } else if (state.currentPage === 'qr') {
+            renderQRLayout(appContent, user, state);
+            attachQRListeners();
         } else {
             renderAdminLayout(appContent, user); 
             attachAdminDashboardListeners(logoutUser, user); 
@@ -908,6 +1156,8 @@ function attachGlobalFunctions() {
     // 2. Content Actions
     window.saveDesign = saveDesign;
     window.deleteDesign = deleteDesign;
+    window.saveQRCode = saveQRCode;
+    window.deleteQRCode = deleteQRCode;
     window.saveGalleryItem = saveGalleryItem;
     window.deleteGalleryItem = deleteGalleryItem;
     window.toggleActivePromo = toggleActivePromo;
