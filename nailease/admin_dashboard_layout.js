@@ -1,5 +1,5 @@
 import { updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline 
+import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo, state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline 
 } from './auth-logic.js';
 
 //pagination per page
@@ -30,12 +30,6 @@ const APPOINTMENT_STATUS_META = {
         badgeClasses: 'bg-sky-100 text-sky-700 border border-sky-200',
         dotClasses: 'bg-sky-500'
     }
-    // REMOVED 'cancelled' META
-    // cancelled: {
-    //     label: 'Cancelled',
-    //     badgeClasses: 'bg-rose-100 text-rose-700 border border-rose-200',
-    //     dotClasses: 'bg-rose-500'
-    // }
 };
 
 const formatDate = (value) => {
@@ -51,7 +45,6 @@ const formatTime = (value) => {
     const toLocale = (date) => date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
     if (value instanceof Date) {
-        // Enforce minute is 00 for display (though the source time might have minutes)
         if (value.getMinutes() !== 0) {
             value.setMinutes(0);
         }
@@ -62,7 +55,6 @@ const formatTime = (value) => {
         const parsedTimestamp = Date.parse(value);
         if (!Number.isNaN(parsedTimestamp) && value.includes('T')) {
             const date = new Date(parsedTimestamp);
-             // Enforce minute is 00 for display
             if (date.getMinutes() !== 0) {
                  date.setMinutes(0);
             }
@@ -73,16 +65,10 @@ const formatTime = (value) => {
             const [hourStr, minuteStr] = value.split(':');
             const minute = parseInt(minuteStr || '0', 10);
             const hour = parseInt(hourStr, 10);
-
-            // Time format check: ensure minute is 00
-            if (minute !== 0) {
-                 // For display, we force it to the hour, but for data integrity, we might want to alert if it's not.
-                 // Since this is a display function, we will force the display to the hour.
-            }
             
             if (hourStr === undefined) return value;
             const date = new Date();
-            date.setHours(hour, 0); // Force minutes to 0
+            date.setHours(hour, 0);
             return toLocale(date);
         } catch (error) {
             return value;
@@ -94,7 +80,6 @@ const formatTime = (value) => {
 
 //input skeleton
 const inputField = (id, label, type = 'text', value = '', required = true) => {
-    // Special handling for time input to show only hours and auto-set minutes to "00"
     if (type === 'time') {
         return `
             <label for="${id}" class="block text-sm font-medium text-gray-700 mt-3">${label}</label>
@@ -118,7 +103,6 @@ const inputField = (id, label, type = 'text', value = '', required = true) => {
 window.formatHourlyTime = function(input) {
     if (input.type === 'time' && input.value) {
         const [hours, minutes] = input.value.split(':');
-        // Force minutes to be "00" and update the input value
         input.value = `${hours}:00`;
     }
 };
@@ -126,16 +110,13 @@ window.formatHourlyTime = function(input) {
 // Initialize time inputs to show only hours
 window.initializeTimeInputs = function() {
     document.querySelectorAll('input[type="time"]').forEach(input => {
-        // Set step to 1 hour to show only hour options
         input.step = 3600;
         
-        // Ensure current value has ":00" minutes
         if (input.value && !input.value.endsWith(':00')) {
             const [hours] = input.value.split(':');
             input.value = `${hours}:00`;
         }
         
-        // Add event listener to enforce format on change
         input.addEventListener('change', function() {
             window.formatHourlyTime(this);
         });
@@ -144,7 +125,6 @@ window.initializeTimeInputs = function() {
 
 // Custom time input that only shows hours
 window.createHourlyTimeInput = function(id, value = '') {
-    // Extract hour from value if provided
     let hourValue = '';
     if (value) {
         const [hours] = value.split(':');
@@ -155,7 +135,7 @@ window.createHourlyTimeInput = function(id, value = '') {
         <select id="${id}" name="${id}" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
             <option value="">Select Time</option>
             ${Array.from({length: 12}, (_, i) => {
-                const hour = i + 8; // 8 AM to 7 PM
+                const hour = i + 8;
                 const displayHour = hour > 12 ? hour - 12 : hour;
                 const ampm = hour >= 12 ? 'PM' : 'AM';
                 const timeValue = `${hour.toString().padStart(2, '0')}:00`;
@@ -202,14 +182,12 @@ const renderDesignsTab = () => {
     const isAddingNew = state.editingDesign === null;
     const design = state.editingDesign || {};
     
-    // pagination logic
     const designsToShow = state.designs.slice(
         (state.designsCurrentPage - 1) * DESIGNS_PER_PAGE,
         state.designsCurrentPage * DESIGNS_PER_PAGE
     );
     const totalPages = Math.ceil(state.designs.length / DESIGNS_PER_PAGE);
 
-    // Design Form
     const formHtml = `
         <form id="design-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">${isAddingNew ? 'Add New Design' : 'Edit Design'}</h3>
@@ -232,7 +210,6 @@ const renderDesignsTab = () => {
         </form>
     `;
 
-    // Design Display
     const listHtml = designsToShow.length > 0 ? designsToShow.map(d => `
         <form id="design-item-form-${d.id}" class="design-item-form bg-white rounded-xl shadow-sm flex items-start p-4 mb-4 border border-gray-100 border-l-4 ${d.isFeatured ? 'border-purple-600' : 'border-accent-pink'}">
             <img src="${d.imageUrl || 'https://placehold.co/100x75/FCE7F3/DB2777?text=No+Img'}" 
@@ -261,7 +238,6 @@ const renderDesignsTab = () => {
             </div>
             
             <div class="flex flex-col space-y-2 flex-shrink-0 ml-4">
-                
                 <button type="button" onclick="window.editDesign('${d.id}')" class="px-3 py-1 text-sm font-medium rounded-lg text-pink-600 border border-pink-600 hover:bg-pink-50 transition">
                     Edit
                 </button>
@@ -273,7 +249,6 @@ const renderDesignsTab = () => {
         </form>
     `).join('') : '<p class="text-center text-gray-500 py-8">No designs added yet. Use the form above to add one!</p>';
 
-    // Pagination format & design
     const paginationHtml = totalPages > 1 ? `
         <div class="flex justify-center space-x-2 mt-6">
             <button onclick="window.setPage('manage', 'designs', ${state.designsCurrentPage - 1})" ${state.designsCurrentPage === 1 ? 'disabled' : ''} 
@@ -305,21 +280,18 @@ const renderPromoTab = () => {
     const activePromos = state.gallery.filter(item => item.type === 'promo' && item.isActive);
     const promos = state.gallery.filter(item => item.type === 'promo');
     
-    // pagination logic -- All displays
     const promosToShow = promos.slice(
         (state.promosCurrentPage - 1) * PROMOS_PER_PAGE,
         state.promosCurrentPage * PROMOS_PER_PAGE
     );
     const totalPages = Math.ceil(promos.length / PROMOS_PER_PAGE);
     
-    // pagination logic --Currently Active displays
     const activePromosPerPage = 1; 
     const currentActivePage = state.promosActiveCurrentPage || 1; 
     const currentActivePromoIndex = (currentActivePage - 1) * activePromosPerPage;
     const currentActivePromo = activePromos[currentActivePromoIndex]; 
     const totalActivePages = Math.ceil(activePromos.length / activePromosPerPage);
 
-    //Promo Form
     const formHtml = `
         <form id="promo-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">Add New Promo Image</h3>
@@ -330,7 +302,6 @@ const renderPromoTab = () => {
         </form>
     `;
     
-    // Promo displays
     const listHtml = promosToShow.length > 0 ? promosToShow.map(p => `
         <div class="bg-white rounded-xl shadow-sm flex flex-col sm:flex-row items-center p-4 mb-4 border border-gray-100 border-l-4 ${p.isActive ? 'border-green-500' : 'border-gray-300'}">
             <img src="${p.imageUrl || 'https://placehold.co/120x60/FCE7F3/DB2777?text=No+Img'}" 
@@ -355,7 +326,6 @@ const renderPromoTab = () => {
         </div>
     `).join('') : '<p class="text-center text-gray-500 py-8">No promo images added yet.</p>';
     
-    // Pagination format & design --All displays
     const allPromosPaginationHtml = totalPages > 1 ? `
         <div class="flex justify-center space-x-2 mt-6">
             <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage - 1}, ${currentActivePage})" ${state.promosCurrentPage === 1 ? 'disabled' : ''} 
@@ -370,7 +340,6 @@ const renderPromoTab = () => {
         </div>
     ` : '';
 
-    //Pagination format & design --Active promos display
     const activePromosPaginationHtml = totalActivePages > 1 ? `
         <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
             <button onclick="window.setPage('manage', 'promo', ${state.promosCurrentPage}, ${currentActivePage - 1})" ${currentActivePage === 1 ? 'disabled' : ''} 
@@ -420,14 +389,12 @@ const renderPromoTab = () => {
 const renderCredentialsTab = () => {
     const credentials = state.gallery.filter(item => item.type === 'credential');
     
-    // pagination Logic
     const credentialsToShow = credentials.slice(
         (state.credentialsCurrentPage - 1) * CREDENTIALS_PER_PAGE,
         state.credentialsCurrentPage * CREDENTIALS_PER_PAGE
     );
     const totalPages = Math.ceil(credentials.length / CREDENTIALS_PER_PAGE);
 
-    // Credential Form
     const formHtml = `
         <form id="credential-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
             <h3 class="text-xl font-bold text-pink-600 mb-4">Add New Certificate/Credential</h3>
@@ -440,7 +407,6 @@ const renderCredentialsTab = () => {
         </form>
     `;
     
-    // Credential Display
     const listHtml = credentialsToShow.length > 0 ? credentialsToShow.map(c => `
         <div class="bg-white rounded-xl shadow-sm flex flex-col items-center p-4 mb-4 border border-gray-100 border-l-4 border-accent-pink">
             <img src="${c.imageUrl || 'https://placehold.co/200x150/FCE7F3/DB2777?text=No+Img'}" 
@@ -454,7 +420,6 @@ const renderCredentialsTab = () => {
         </div>
     `).join('') : '<p class="text-center text-gray-500 py-8">No credentials added yet.</p>';
 
-    //Pagination format & design
     const paginationHtml = totalPages > 1 ? `
         <div class="flex justify-center space-x-2 mt-6">
             <button onclick="window.setPage('manage', 'credentials', ${state.credentialsCurrentPage - 1})" ${state.credentialsCurrentPage === 1 ? 'disabled' : ''} 
@@ -492,7 +457,6 @@ export function renderManageView(user) {
     let contentHtml = '';
     let tabTitle = '';
     
-    //this is for the clearing of the editing form
     if (state.editingDesign !== null && state.currentTab === 'designs' && state.currentPage !== 'editing') {
           state.editingDesign = null;
     }
@@ -512,7 +476,6 @@ export function renderManageView(user) {
             break;
     }
 
-    //the structure of the content management
     return `
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
             <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
@@ -644,7 +607,6 @@ export function renderAppointmentsLayout(container, user, state) {
                         <select id="status-${booking.id}" name="status" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500">
                             ${Object.keys(APPOINTMENT_STATUS_META).map(statusKey => {
                                 const isSelected = statusKey === currentStatusKey;
-                                // HINDI na sinasama ang 'cancelled' option dito
                                 return `<option value="${statusKey}" ${isSelected ? 'selected' : ''}>${APPOINTMENT_STATUS_META[statusKey].label}</option>`;
                             }).join('')}
                         </select>
@@ -665,7 +627,6 @@ export function renderAppointmentsLayout(container, user, state) {
         </div>
     `;
 
-// Updated Walk-in Form with consistent layout for all fields
 const walkInFormHtml = `
 <form id="walkInForm" class="space-y-4 bg-white border border-gray-100 p-6 rounded-xl shadow-sm">
     <div>
@@ -942,7 +903,6 @@ const walkInFormHtml = `
 
     container.innerHTML = appointmentsHtml;
     
-    // Initialize time inputs after rendering
     setTimeout(() => {
         if (typeof window.initializeTimeInputs === 'function') {
             window.initializeTimeInputs();
@@ -997,7 +957,6 @@ export function attachAppointmentsListeners() {
             const formData = new FormData(walkInForm);
             const payload = Object.fromEntries(formData.entries());
             
-            // Validate time format to ensure it's on the hour (e.g., 10:00, not 10:20)
             const timeParts = payload.selectedTime.split(':');
             if (timeParts.length === 2 && parseInt(timeParts[1], 10) !== 0) {
                 alert('Please select a time that is on the hour (e.g., 10:00, 11:00). Minutes must be "00".');
@@ -1024,7 +983,6 @@ export function attachAppointmentsListeners() {
         });
     });
     
-    // Initialize time inputs when appointments page loads
     setTimeout(() => {
         if (typeof window.initializeTimeInputs === 'function') {
             window.initializeTimeInputs();
@@ -1038,45 +996,28 @@ export function renderAdminLayout(container, user) {
     const avatarLetter = adminName.charAt(0).toUpperCase();
 
     const adminHTML = `
-       <header class="sticky top-0 bg-white shadow-md z-50">
-<<<<<<< HEAD
-<div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-<a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+        <div class="min-h-screen bg-gray-50">
+            <header class="sticky top-0 bg-white shadow-md z-50">
+                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                    <div class="flex items-center space-x-6">
+                        <a href="#" class="text-xl font-bold text-pink-600 tracking-wider">DCAC</a>
+                        <nav class="hidden md:flex space-x-4">
+                            <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
+                            <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+                            <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
+                            <a href="index.html" class="text-pink-600 hover:text-pink-700 transition duration-150">Dashboard</a>
+                        </nav>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
+                    </div>
+                </div>
+            </header>
 
-<div class="hidden sm:flex space-x-4 items-center">
-<a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
-
-<a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
-<a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
-
-<a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
-
-<button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
-</div>
- </div>
- </header>
-=======
-            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                <a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
-                
-                <div class="hidden sm:flex space-x-4 items-center">
-                                        <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
-                    
-                    <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
-                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
-                    
-                                        <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
-                    
-                    <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
-                </div>
-            </div>
-        </header>
->>>>>>> b06effa (Design Portfolio)
-
-        <div class="text-center py-8 bg-white border-b border-gray-100">
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800">Admin Dashboard</h1>
-            <p class="text-sm text-gray-500 mt-1">Manage operations, clients, and content</p>
-        </div>
+            <div class="text-center py-8 bg-white border-b border-gray-100">
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800">Admin Dashboard</h1>
+                <p class="text-sm text-gray-500 mt-1">Manage operations, clients, and content</p>
+            </div>
         
         <div class="w-full p-4 md:p-8"> 
             <div class="w-full px-0 mx-0">
@@ -1095,10 +1036,10 @@ export function renderAdminLayout(container, user) {
                         </div>
 
                         <div class="flex flex-wrap gap-3">
-                            <a href="#" class="flex items-center px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-medium rounded-lg transition duration-150 shadow-md shadow-pink-600/20">
+                            <button class="flex items-center px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-medium rounded-lg transition duration-150 shadow-md shadow-pink-600/20">
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.001 0 0120.488 9z"></path></svg>
                                 Dashboard
-                            </a>
+                            </button>
                             <button id="editProfileBtn" class="flex items-center px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition duration-150">
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 Edit Profile
@@ -1123,18 +1064,24 @@ export function renderAdminLayout(container, user) {
                                 <span class="text-2xl mr-2 text-pink-600">🎨</span>
                                 <h3 class="text-lg font-semibold text-gray-800">Content Management</h3>
                             </div>
-                            <button id="manageContentBtn" onclick="window.setPage('manage')" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button>
+                            <button id="manageContentBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button>
                         </div>
                         <p class="text-sm text-gray-500 mb-4">Manage website content including designs, promos, credentials, and portfolio showcase.</p>
                         <div class="flex flex-wrap gap-2">
-                            <button onclick="window.setPage('manage', 'designs')" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Designs</button>
-                            <button onclick="window.setPage('manage', 'promo')" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Promos</button>
-                            <button onclick="window.setPage('manage', 'credentials')" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Credentials</button>
+                            <button class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Designs</button>
+                            <button class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Promos</button>
+                            <button class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Credentials</button>
                         </div>
                     </div>
 
                     <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition duration-300">
-                        <div class="flex justify-between items-center mb-4"><div class="flex items-center"><span class="text-2xl mr-2 text-pink-600">⭐</span><h3 class="text-lg font-semibold text-gray-800">Review Management</h3></div><button id="manageReviewBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button></div>
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center">
+                                <span class="text-2xl mr-2 text-pink-600">⭐</span>
+                                <h3 class="text-lg font-semibold text-gray-800">Review Management</h3>
+                            </div>
+                            <button id="manageReviewBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button>
+                        </div>
                         <p class="text-sm text-gray-500 mb-4">Manage client reviews, add photos to testimonials, and moderate review content.</p>
                         <div class="flex flex-wrap gap-2">
                             <button id="addReviewPhotosBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Add Photos</button>
@@ -1144,7 +1091,13 @@ export function renderAdminLayout(container, user) {
                     </div>
 
                     <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition duration-300">
-                        <div class="flex justify-between items-center mb-4"><div class="flex items-center"><span class="text-2xl mr-2 text-pink-600">📅</span><h3 class="text-lg font-semibold text-gray-800">Appointments</h3></div><button id="manageAppointmentsBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button></div>
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center">
+                                <span class="text-2xl mr-2 text-pink-600">📅</span>
+                                <h3 class="text-lg font-semibold text-gray-800">Appointments</h3>
+                            </div>
+                            <button id="manageAppointmentsBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button>
+                        </div>
                         <p class="text-sm text-gray-500 mb-4">View and manage all appointments, including online bookings and walk-in clients.</p>
                         <div class="flex flex-wrap gap-2">
                             <button id="addWalkInBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Add Walk-in</button>
@@ -1188,40 +1141,59 @@ export function renderAdminLayout(container, user) {
             </div>
         </div>
        ${adminProfileModalHtml}
-      
     `;
     
     container.innerHTML = adminHTML;
     
     attachAdminDashboardListeners(logoutUser, user, setPage, updateProfile); 
 }
-/**
- * Attaches all necessary event listeners to the Admin Dashboard elements.
- * @param {function} logoutUser - The logout function from auth_logic.js.
- * @param {object} user - The authenticated user object.
- */
 
 export function attachAdminDashboardListeners(logoutUser, user, setPage, updateProfile) {
         const navigate = typeof setPage === 'function' ? setPage : window.setPage;
         const setStatusFilter = typeof window.setBookingStatusFilter === 'function' ? window.setBookingStatusFilter : null;
         const setAppointmentsTab = typeof window.setAppointmentsTab === 'function' ? window.setAppointmentsTab : null;
-        // Function to SHOW the modal
-        const showModal = (id) => {const modal = document.getElementById(id);
+
+        // Handle logout with error handling
+        const handleLogout = async () => {
+            try {
+                await logoutUser();
+                navigate('login');
+            } catch (error) {
+                console.error('Logout error:', error);
+                if (error.code === 'auth/cancelled-popup-request') {
+                    // User cancelled the popup, no need to show error
+                    return;
+                }
+                // Show error message to user
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Logout Failed',
+                        text: 'Please try again. If the problem persists, refresh the page.',
+                        confirmButtonColor: '#EC4899'
+                    });
+                } else {
+                    alert('Logout failed. Please try again or refresh the page.');
+                }
+            }
+        };
+        
+        const showModal = (id) => {
+            const modal = document.getElementById(id);
             if (modal) {
-                modal.classList.remove('hidden'); // 1. Make it visible
-                modal.classList.add('flex');     // 2. Apply display:flex for centering
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
             }
         };
 
-        // Function to HIDE the modal
-        const hideModal = (id) => {const modal = document.getElementById(id);
+        const hideModal = (id) => {
+            const modal = document.getElementById(id);
             if (modal) {
-                modal.classList.add('hidden');  // 1. Hide it
-                modal.classList.remove('flex'); // 2. Clean up display:flex
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
             }
         };
 
-        //to guard the save button --unless changes has been made it won't be clickable
         window.toggleSaveButton = (id) => {
             const titleInput = document.getElementById(`design-title-${id}`);
             const priceInput = document.getElementById(`design-price-${id}`);
@@ -1235,7 +1207,6 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
             }
         };
 
-        //to set the new value as initial value
         window.resetSaveButton = (id) => {
             const titleInput = document.getElementById(`design-title-${id}`);
             const priceInput = document.getElementById(`design-price-${id}`);
@@ -1248,37 +1219,31 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
             }
         };
 
-        document.getElementById('logoutBtn')?.addEventListener('click', logoutUser); 
-        document.getElementById('manageContentBtn')?.addEventListener('click', () => navigate?.('manage')); 
+        document.getElementById('logoutBtn')?.addEventListener('click', handleLogout);
+        document.getElementById('manageContentBtn')?.addEventListener('click', () => navigate?.('manage'));
 
-        // Edit Profile Button
         document.getElementById('editProfileBtn')?.addEventListener('click', () => {
             const adminProfileModal = document.getElementById('adminProfileModal');
             if (adminProfileModal) {
-                // This will now REMOVE the 'hidden' class, making the modal visible.
                 showModal('adminProfileModal'); 
             }
         });
 
-        // Modal Close Handlers    
         document.getElementById('cancelAdminModalBtn')?.addEventListener('click', () => { hideModal('adminProfileModal'); });
         document.getElementById('adminProfileModal')?.addEventListener('click', (e) => {
             if (e.target.id === 'adminProfileModal') { hideModal('adminProfileModal'); }
         });
 
-        
-        // Admin Profile Form Submission (Uses Firebase updateProfile logic)
         document.getElementById('adminProfileForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             const newName = document.getElementById('adminNameInput').value;
             const profileError = document.getElementById('profileError');
-            profileError.textContent = ''; // Clear previous errors
+            profileError.textContent = '';
             profileError.classList.add('hidden');
             
             try {
-                // Assumes 'updateProfile' is the imported Firebase function
                 await updateProfile(user, { displayName: newName }); 
-                window.renderApp(); // Re-render to show the new name on the dashboard
+                window.renderApp();
                 hideModal('adminProfileModal');
             } catch (error) {
                 console.error("Failed to update profile:", error);
@@ -1287,7 +1252,6 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
             }
         });
         
-        // Forms for Content Management (Attached on the 'manage' page only)
         const attachContentFormListeners = () => {
             const designForm = document.getElementById('design-form');
             if (designForm) {
@@ -1331,10 +1295,8 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
             }
         };
         
-        // Export the form attachment function for use after rendering the manage view
         window.attachContentFormListeners = attachContentFormListeners;
 
-        // Placeholder console logs for other buttons
         document.getElementById('manageReviewBtn')?.addEventListener('click', () => console.log('Review Management Opened'));
         document.getElementById('manageAppointmentsBtn')?.addEventListener('click', () => navigate?.('appointments'));
         document.getElementById('addWalkInBtn')?.addEventListener('click', () => {
@@ -1358,7 +1320,6 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
             setStatusFilter?.('pending');
         });
         
-        // Initialize time inputs when admin dashboard loads
         setTimeout(() => {
             if (typeof window.initializeTimeInputs === 'function') {
                 window.initializeTimeInputs();

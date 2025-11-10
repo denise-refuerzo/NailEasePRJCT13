@@ -21,12 +21,6 @@ export const firebaseConfig = {
     measurementId: "G-RE42B3FVRJ"
 };
 
-<<<<<<< HEAD
-=======
-export const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; //admin id
-export const APP_ID = 'nailease25-iapt'; // firebase project id
-
->>>>>>> b06effa (Design Portfolio)
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app); 
 export const db = getFirestore(app); // <-- EXPORT DB
@@ -43,15 +37,9 @@ const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
 const LIST_CALENDAR_EVENTS_URL = 'https://us-central1-nailease25.cloudfunctions.net/listCalendarEvents';
 
 
-<<<<<<< HEAD
 export function getClientDocRef(uid) {
     const clientsCollectionPath = `/artifacts/${APP_ID}/users/${uid}/clients`;
     return doc(collection(db, clientsCollectionPath), uid);
-=======
-function getClientDocRef(uid) {
-    const clientsCollectionPath = `/artifacts/${APP_ID}/users/${uid}/clients`;
-    return doc(collection(db, clientsCollectionPath), uid);
->>>>>>> b06effa (Design Portfolio)
 }
 
 function getContentDocRef(collectionPath, id) {
@@ -173,7 +161,6 @@ async function logoutUser() {
 }
 
 export const state = { 
-<<<<<<< HEAD
     currentPage: 'dashboard', 
     currentTab: 'designs', 
     designs: [], 
@@ -224,44 +211,6 @@ export function setPage(page, tab = 'designs', targetPage = 1, activePromoPage =
     }
     
     window.checkAndSetRole(auth.currentUser); 
-=======
-    currentPage: 'dashboard', 
-    currentTab: 'designs', 
-    designs: [], 
-    gallery: [], 
-    editingDesign: null,
-    
-    // NEW PAGINATION STATE
-    designsCurrentPage: 1,
-    promosCurrentPage: 1,
-    credentialsCurrentPage: 1,
-    promosActiveCurrentPage: 1, // State for active promo pagination
-}; 
-
-export function setPage(page, tab = 'designs', targetPage = 1, activePromoPage = 1) { 
-    console.log(`Setting page to ${page}, tab to ${tab}, list page: ${targetPage}, active promo page: ${activePromoPage}`);
-    
-    state.currentPage = page;
-    state.currentTab = tab;
-    
-    // Reset editing state
-    if (page === 'dashboard' || page === 'manage') {
-        state.editingDesign = null;
-    }
-    
-    // Update pagination state based on tab
-    if (tab === 'designs') {
-        state.designsCurrentPage = Math.max(1, targetPage);
-    } else if (tab === 'promo') {
-        state.promosCurrentPage = Math.max(1, targetPage);
-        // CRITICAL: Update active promo page state
-        state.promosActiveCurrentPage = Math.max(1, activePromoPage); 
-    } else if (tab === 'credentials') {
-        state.credentialsCurrentPage = Math.max(1, targetPage);
-    }
-    
-    window.checkAndSetRole(auth.currentUser); 
->>>>>>> b06effa (Design Portfolio)
 }
 
 export function setTab(tab) { 
@@ -288,9 +237,8 @@ async function fetchContent() {
         // Fetch Gallery (Promo and Credentials)
         const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
         const gallerySnapshot = await getDocs(galleryQuery);
-        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-<<<<<<< HEAD
         // Fetch Bookings (Admin Appointments)
         const bookingsQuery = query(collection(db, BOOKINGS_COLLECTION), orderBy('createdAt', 'desc'));
         const bookingsSnapshot = await getDocs(bookingsQuery);
@@ -315,11 +263,6 @@ async function fetchContent() {
     } catch (error) {
         console.error("Error fetching admin content:", error);
     }
-=======
-    } catch (error) {
-        console.error("Error fetching admin content:", error);
-    }
->>>>>>> b06effa (Design Portfolio)
 }
 
 export async function saveDesign(id, data) { 
@@ -329,26 +272,26 @@ export async function saveDesign(id, data) {
             price: parseFloat(data.price), 
             timestamp: serverTimestamp() 
         };
-        const action = id ? 'updated' : 'added';
-        const title = data.title || 'New Design';
+        const title = data.title || 'New Design';
 
-        if (id) {
-            await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), payload, { merge: true });
-        } else {
-            await addDoc(collection(db, DESIGNS_COLLECTION), payload);
-        }
-        
-        state.editingDesign = null;
-        window.checkAndSetRole(auth.currentUser); 
+        if (id) {
+            await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), payload, { merge: true });
+        } else {
+            await addDoc(collection(db, DESIGNS_COLLECTION), payload);
+        }
+        
+        state.editingDesign = null;
+        window.checkAndSetRole(auth.currentUser); 
 
-        // SWEETALERT SUCCESS NOTIFICATION
-        Swal.fire({
-            icon: 'success',
-            title: 'Success!',
-            text: `Design "${title}" successfully ${action}.`,
-            showConfirmButton: false,
-            timer: 1500
-        });
+        // SWEETALERT SUCCESS NOTIFICATION
+        const action = id ? 'updated' : 'created';
+        Swal.fire({
+            icon: 'success',
+            title: 'Success!',
+            text: `Design "${title}" successfully ${action}.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
 
     } catch (error) {
         console.error("Error saving design:", error);
@@ -806,10 +749,9 @@ function renderApp(user, clientData) {
     const isClientOnboarded = clientData && clientData.isVerified;
 
     
-    hideContainer('auth-card'); 
-    showContainer('app-content'); 
+    hideContainer('auth-card'); 
+    showContainer('app-content'); 
 
-<<<<<<< HEAD
     if (isAdmin) {
         if (state.currentPage === 'manage' || state.currentPage === 'editing') { 
             appContent.innerHTML = renderManageView(user);
@@ -824,19 +766,6 @@ function renderApp(user, clientData) {
             renderAdminLayout(appContent, user); 
             attachAdminDashboardListeners(logoutUser, user); 
         }
-=======
-    if (isAdmin) {
-        if (state.currentPage === 'manage' || state.currentPage === 'editing') { 
-            appContent.innerHTML = renderManageView(user);
-            if (window.attachContentFormListeners) {
-                window.attachContentFormListeners();
-            }
-        } else {
-            renderAdminLayout(appContent, user); 
-        }
-        
-        attachAdminDashboardListeners(logoutUser, user); 
->>>>>>> b06effa (Design Portfolio)
 
     } else {
         // CLIENT FLOW
@@ -970,7 +899,6 @@ function renderError(message) {
 }
 
 function attachGlobalFunctions() {
-<<<<<<< HEAD
     // 1. Core Navigation
     window.setPage = setPage;
     window.setTab = setTab;
@@ -996,21 +924,6 @@ function attachGlobalFunctions() {
             window.checkAndSetRole(auth.currentUser);
         }
     };
-=======
-    // 1. Core Navigation
-    window.setPage = setPage;
-    window.setTab = setTab;
-
-    // 2. Content Actions
-    window.saveDesign = saveDesign;
-    window.deleteDesign = deleteDesign;
-    window.saveGalleryItem = saveGalleryItem;
-    window.deleteGalleryItem = deleteGalleryItem;
-    window.toggleActivePromo = toggleActivePromo;
-    window.toggleFeaturedDesign = toggleFeaturedDesign;
-    window.editDesign = editDesign;
-    window.updateDesignInline = updateDesignInline; // The function for inline saving
->>>>>>> b06effa (Design Portfolio)
 
     // 3. Other Core
     window.logoutUser = logoutUser;
@@ -1054,42 +967,9 @@ export function startAuthFlow() {
                                 loginBtn.classList.remove('hidden');
                             }
                         }
-        });
-
-<<<<<<< HEAD
-        const loginButton = document.getElementById('google-login-btn');
-
-        if (loginButton) {
-            loginButton.addEventListener('click', () => {
-                const provider = new GoogleAuthProvider();
-                signInWithPopup(auth, provider).catch(error => {
-                    console.error("Google Sign-In Error:", error.code, error.message);
-                    alert(`Login Failed: ${error.message}`);
-                });
-            });
-        }
-        onAuthStateChanged(auth, (user) => {
-                        const accountLink = document.getElementById('account-link');
-                        const loginBtn = document.getElementById('google-login-btn');
-            
-                        if (accountLink && loginBtn) {
-                            if (user) {
-                                // User is logged in: Show "My Account" link, Hide "Sign In" button
-                                accountLink.classList.remove('hidden');
-                                loginBtn.classList.add('hidden');
-                            } else {
-                                // User is NOT logged in: Hide "My Account" link, Show "Sign In" button
-                                accountLink.classList.add('hidden');
-                                loginBtn.classList.remove('hidden');
-                            }
-                        }
         });
 
     });
 }
 
 onAuthStateChanged(auth, checkAndSetRole);
-=======
-    });
-}
->>>>>>> b06effa (Design Portfolio)

@@ -55,7 +55,7 @@ export const clientDashboardTemplate = `
                         <div class="empty-icon text-5xl mb-4 opacity-70">📅</div>
                         <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Appointments Yet</h3>
                         <p class="empty-description mb-6 leading-relaxed">Your future and past appointments will appear here once booked.</p>
-                        <a href="#" class="book-now-btn bg-gradient-to-r from-pink-500 to-red-400 text-white px-8 py-3 rounded-full font-bold inline-block transition transform hover:scale-105 shadow-xl shadow-pink-300/50" id="bookNowBtn">
+                        <a href="book.html" class="book-now-btn bg-gradient-to-r from-pink-500 to-red-400 text-white px-8 py-3 rounded-full font-bold inline-block transition transform hover:scale-105 shadow-xl shadow-pink-300/50" id="bookNowBtn">
                             Book Now
                         </a>
                     </div>
