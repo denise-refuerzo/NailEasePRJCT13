@@ -1,4 +1,19 @@
 /**
+ * Escapes HTML attribute values to prevent XSS and broken HTML
+ * @param {string} str - The string to escape
+ * @returns {string} The escaped string
+ */
+const escapeHtmlAttr = (str) => {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+};
+
+/**
  * Renders a single content card (for Promo, Credential, or Design).
  * @param {Object} item - The data item.
  * @param {string} type - 'promo', 'credential', or 'design'.
@@ -23,7 +38,11 @@ const renderContentCard = (item, type) => {
                 <p class="text-pink-300 text-sm font-semibold">₱${item.price.toFixed(2)}</p>
                 
                 <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors"
-                        data-design-id="${item.id}">Book Now</button>
+                        data-design-id="${item.id}"
+                        data-design-title="${escapeHtmlAttr(item.title || 'Design')}"
+                        data-design-price="${item.price || 0}"
+                        data-design-image="${escapeHtmlAttr(item.imageUrl || '')}"
+                        data-design-description="${escapeHtmlAttr(item.description || 'Professional design service')}">Book Now</button>
             </div>
         `;
     } else if (type === 'promo') {
@@ -103,6 +122,7 @@ const renderTopPicks = (items) => {
 };
 
 export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
+    const GOOGLE_CALENDAR_EMBED_URL = typeof window !== 'undefined' ? window.__NAILEASE_CALENDAR_EMBED_URL__ : '';
     const customStyle = `
         <style>
             /* Custom Scrollbar and Text Shadow styles remain the same */
@@ -123,12 +143,12 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
         <div class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
                 <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                    <a href="home.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                    <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
                     
                     <nav class="flex space-x-4 items-center">
                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
-                        <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
-                        <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Book</a>
+                        <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
+                        <a href="book.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Book</a>
                         <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
                         <button id="accountLinkBtn" class="flex items-center text-pink-600 hover:text-pink-700 transition duration-150 p-2 rounded-full hover:bg-pink-50">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -144,6 +164,29 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
                 </div>
                 
                 ${renderTopPicks(topPicks)}
+
+                <section class="mt-10">
+                    <h2 class="text-2xl font-extrabold text-pink-600 mb-4 tracking-wider">Calendar</h2>
+                    <p class="text-sm text-gray-600 mb-4">See available and not available dates and times. Updated in real time with admin and user bookings.</p>
+                    <div id="public-availability-calendar" class="bg-white rounded-2xl shadow-md border border-gray-100 p-4"></div>
+                </section>
+                
+                ${GOOGLE_CALENDAR_EMBED_URL ? `
+                <section class="mt-8">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Admin Calendar (Read‑only)</h3>
+                    <p class="text-xs text-gray-500 mb-3">Reflects the admin’s Google Calendar. For privacy, only availability is used in the booking view.</p>
+                    <div class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                        <iframe
+                            src="${GOOGLE_CALENDAR_EMBED_URL}"
+                            class="w-full h-[540px] border-0"
+                            frameborder="0"
+                            scrolling="no"
+                            loading="lazy"
+                            allowfullscreen
+                        ></iframe>
+                    </div>
+                </section>
+                ` : ''}
             </main>
 
             <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
@@ -154,6 +197,18 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
 };
 
 export const attachPublicPageListeners = () => {
+    // Initialize availability calendar after DOM is in place
+    (async () => {
+        try {
+            const module = await import('./public_availability_calendar.js');
+            const container = document.getElementById('public-availability-calendar');
+            if (container && typeof module.renderPublicAvailabilityCalendar === 'function') {
+                module.renderPublicAvailabilityCalendar(container);
+            }
+        } catch (e) {
+            console.error('Failed to load availability calendar:', e);
+        }
+    })();
         const setupCarousel = (id, cardWidth = 216) => { 
         const track = document.getElementById(`${id}-track`);
         const nextButton = document.getElementById(`${id}-next`);
@@ -205,10 +260,13 @@ export const attachPublicPageListeners = () => {
     document.querySelectorAll('.book-design-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             e.preventDefault();
-            const designId = e.currentTarget.dataset.designId;
-            // Temporary handler: Later, this will redirect to a booking form or checkout page.
-            alert(`Booking requested for Design ID: ${designId}. Redirecting to booking page...`);
-            // window.location.href = 'booking.html?design=' + designId; // Example redirect
+            const designTitle = encodeURIComponent(e.currentTarget.dataset.designTitle || 'Design');
+            const designPrice = e.currentTarget.dataset.designPrice || '0';
+            const designImage = encodeURIComponent(e.currentTarget.dataset.designImage || '');
+            const designDescription = encodeURIComponent(e.currentTarget.dataset.designDescription || 'Professional design service');
+            
+            // Redirect to book.html with design parameters
+            window.location.href = `book.html?design=${designTitle}&price=${designPrice}&image=${designImage}&description=${designDescription}`;
         });
     });
 };

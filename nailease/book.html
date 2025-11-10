@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCAC NailEase - Book Your Design</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        
+        // Auto-fill user name when signed in
+        onAuthStateChanged(auth, (user) => {
+            if (user && user.displayName) {
+                const fullNameInput = document.getElementById('fullName');
+                if (fullNameInput && !fullNameInput.value) {
+                    fullNameInput.value = user.displayName;
+                }
+                const emailInput = document.getElementById('email');
+                if (emailInput && user.email && !emailInput.value) {
+                    emailInput.value = user.email;
+                }
+            }
+        });
+        
+        window.auth = auth;
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcf4f8;
+        }
+        .step-content {
+            display: none;
+        }
+        .step-content.active {
+            display: block;
+            animation: fadeInUp 0.5s ease;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .calendar-day {
+            aspect-ratio: 1.2;
+            min-height: 65px;
+        }
+        .calendar-day.header {
+            background: linear-gradient(135deg, #ec4899, #f472b6);
+            color: white;
+            cursor: default;
+            min-height: 50px;
+        }
+        .calendar-day.disabled {
+            background: #f8f9fa;
+            color: #bbb;
+            cursor: not-allowed;
+        }
+        .calendar-day.other-month {
+            background: #f8f9fa;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .calendar-day.unavailable {
+            background: linear-gradient(135deg, #ffebee, #ffcdd2);
+            color: #d32f2f;
+            cursor: not-allowed;
+            position: relative;
+        }
+        .calendar-day.unavailable::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 20%;
+            right: 20%;
+            height: 2px;
+            background: #d32f2f;
+            transform: translateY(-50%);
+        }
+        .calendar-day.unavailable::after {
+            content: 'Booked';
+            position: absolute;
+            bottom: 5px;
+            left: 0;
+            right: 0;
+            font-size: 0.7rem;
+            text-align: center;
+            color: #d32f2f;
+        }
+        .calendar-day.selected {
+            background: linear-gradient(135deg, #ec4899, #f472b6);
+            color: white;
+            transform: scale(0.98);
+        }
+        .calendar-day.selected::after {
+            content: '✓';
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .calendar-day.today {
+            border: 2px solid #ffa500;
+        }
+        .calendar-day.today::before {
+            content: 'Today';
+            position: absolute;
+            top: 5px;
+            left: 0;
+            right: 0;
+            font-size: 0.7rem;
+            text-align: center;
+            color: #ffa500;
+            font-weight: bold;
+        }
+        .time-slot.unavailable {
+            background: #f5f5f5;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .time-slot.selected {
+            background: #ec4899;
+            color: white;
+            border-color: #ec4899;
+        }
+        .payment-method.selected {
+            border-color: #ec4899;
+            background: rgba(236, 72, 153, 0.1);
+        }
+        .error-message {
+            display: none;
+        }
+        .error-message.show {
+            display: block;
+        }
+        .receipt-upload.dragover {
+            background: rgba(236, 72, 153, 0.2);
+            border-color: #ec4899;
+        }
+        /* Step Box Styles - Nail Shape Design */
+        .nail-shape {
+            width: 48px;
+            height: 64px;
+            position: relative;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        @media (min-width: 768px) {
+            .nail-shape {
+                width: 64px;
+                height: 80px;
+            }
+        }
+        
+        /* Active nail - Pink polish with shine */
+        .nail-active {
+            background: linear-gradient(135deg, #ec4899 0%, #f472b6 50%, #ec4899 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(236, 72, 153, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+        
+        .nail-active::before {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 20%;
+            width: 60%;
+            height: 30%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        /* Inactive nail - Gray/natural nail */
+        .nail-inactive {
+            background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 50%, #e5e7eb 100%);
+            color: #6b7280;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Completed nail - Green polish */
+        .nail-completed {
+            background: linear-gradient(135deg, #10b981 0%, #34d399 50%, #10b981 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+        
+        .nail-completed::before {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 20%;
+            width: 60%;
+            height: 30%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        #step1Box, #step2Box, #step3Box, #step4Box, #step5Box {
+            transition: all 0.3s ease;
+        }
+        
+        #step1Box:hover, #step2Box:hover, #step3Box:hover, #step4Box:hover, #step5Box:hover {
+            transform: scale(1.1);
+        }
+        
+        .step-number, .step-check {
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .step-check {
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-pink-50/50">
+        <!-- Header -->
+        <header class="sticky top-0 bg-white shadow-lg z-50">
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                
+                <nav class="flex space-x-4 items-center">
+                    <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
+                    <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
+                    <a href="book.html" class="text-pink-600 font-medium">Book</a>
+                    <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
+                    <button id="account-link" class="flex items-center text-pink-600 hover:text-pink-700 transition duration-150 p-2 rounded-full hover:bg-pink-50">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <main class="max-w-4xl mx-auto p-6 md:p-10 pb-24">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-pink-600 text-center mb-8">Book Your Design</h1>
+
+            <!-- Progress Bar -->
+            <div class="bg-white rounded-3xl shadow-xl p-4 md:p-6 lg:p-8 mb-6">
+                <div class="flex justify-between items-center relative mb-4 md:mb-6 overflow-x-auto pb-2">
+                    <div class="flex-shrink-0 text-center relative z-10 min-w-[60px] md:min-w-[80px]">
+                        <div class="nail-shape nail-active flex items-center justify-center mx-auto mb-2 font-bold text-base md:text-lg shadow-lg transition-all transform hover:scale-105" id="step1Box">
+                            <span class="step-number">1</span>
+                            <span class="step-check hidden">✓</span>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-pink-600">Design</div>
+                    </div>
+                    <div class="flex-1 flex items-center justify-center relative z-10 min-w-[20px] md:min-w-[40px] px-1">
+                        <div class="h-1 w-full bg-gray-200 rounded-full">
+                            <div class="h-full bg-pink-500 transition-all duration-500 rounded-full" id="progressFill1" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 text-center relative z-10 min-w-[60px] md:min-w-[80px]">
+                        <div class="nail-shape nail-inactive flex items-center justify-center mx-auto mb-2 font-bold text-base md:text-lg shadow-md transition-all transform hover:scale-105" id="step2Box">
+                            <span class="step-number">2</span>
+                            <span class="step-check hidden">✓</span>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-gray-600">Date</div>
+                    </div>
+                    <div class="flex-1 flex items-center justify-center relative z-10 min-w-[20px] md:min-w-[40px] px-1">
+                        <div class="h-1 w-full bg-gray-200 rounded-full">
+                            <div class="h-full bg-pink-500 transition-all duration-500 rounded-full" id="progressFill2" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 text-center relative z-10 min-w-[60px] md:min-w-[80px]">
+                        <div class="nail-shape nail-inactive flex items-center justify-center mx-auto mb-2 font-bold text-base md:text-lg shadow-md transition-all transform hover:scale-105" id="step3Box">
+                            <span class="step-number">3</span>
+                            <span class="step-check hidden">✓</span>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-gray-600">Time</div>
+                    </div>
+                    <div class="flex-1 flex items-center justify-center relative z-10 min-w-[20px] md:min-w-[40px] px-1">
+                        <div class="h-1 w-full bg-gray-200 rounded-full">
+                            <div class="h-full bg-pink-500 transition-all duration-500 rounded-full" id="progressFill3" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 text-center relative z-10 min-w-[60px] md:min-w-[80px]">
+                        <div class="nail-shape nail-inactive flex items-center justify-center mx-auto mb-2 font-bold text-base md:text-lg shadow-md transition-all transform hover:scale-105" id="step4Box">
+                            <span class="step-number">4</span>
+                            <span class="step-check hidden">✓</span>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-gray-600">Details</div>
+                    </div>
+                    <div class="flex-1 flex items-center justify-center relative z-10 min-w-[20px] md:min-w-[40px] px-1">
+                        <div class="h-1 w-full bg-gray-200 rounded-full">
+                            <div class="h-full bg-pink-500 transition-all duration-500 rounded-full" id="progressFill4" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 text-center relative z-10 min-w-[60px] md:min-w-[80px]">
+                        <div class="nail-shape nail-inactive flex items-center justify-center mx-auto mb-2 font-bold text-base md:text-lg shadow-md transition-all transform hover:scale-105" id="step5Box">
+                            <span class="step-number">5</span>
+                            <span class="step-check hidden">✓</span>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-gray-600">Payment</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 1: Design Selection -->
+            <div class="step-content active bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step1">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Selected Design</h2>
+                <div class="border-3 border-pink-500 rounded-2xl p-6 text-center bg-gradient-to-br from-pink-50 to-pink-100">
+                    <div class="w-full h-40 bg-gray-100 rounded-xl flex items-center justify-center text-lg font-semibold text-gray-600 mb-4" id="selectedDesignImage">Clean & Modern</div>
+                    <div>
+                        <h3 class="text-xl font-bold text-pink-600 mb-2" id="selectedDesignName">Clean & Modern</h3>
+                        <div class="text-3xl font-bold text-green-600 mb-2" id="selectedDesignPrice">₱299</div>
+                        <p class="text-gray-600 mb-4" id="selectedDesignDescription">Minimalist logo design with modern aesthetics</p>
+                        <button class="bg-pink-50 border-2 border-pink-500 text-pink-600 px-6 py-2 rounded-full font-bold hover:bg-pink-500 hover:text-white transition-all" onclick="changeDesign()">Change Design</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Calendar -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step2">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Choose Your Date</h2>
+                <div class="max-w-2xl mx-auto">
+                    <div class="flex justify-between items-center mb-6 bg-gradient-to-r from-pink-500 to-pink-400 text-white p-5 rounded-2xl shadow-lg">
+                        <button class="bg-white/20 hover:bg-white/30 rounded-full w-12 h-12 flex items-center justify-center text-2xl transition-all" id="prevMonth">‹</button>
+                        <div class="text-xl font-bold" id="monthYear">December 2024</div>
+                        <button class="bg-white/20 hover:bg-white/30 rounded-full w-12 h-12 flex items-center justify-center text-2xl transition-all" id="nextMonth">›</button>
+                    </div>
+                    <div class="grid grid-cols-7 gap-1 bg-gray-200 rounded-2xl overflow-hidden shadow-lg" id="calendarGrid">
+                        <!-- Calendar will be generated by JavaScript -->
+                    </div>
+                    <div class="text-center mt-6">
+                        <div class="flex justify-center items-center gap-5 flex-wrap bg-white p-4 rounded-2xl shadow-md">
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gradient-to-br from-pink-500 to-pink-400 rounded"></div>
+                                <span class="text-gray-600 text-sm">Available</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gradient-to-br from-red-100 to-red-200 rounded"></div>
+                                <span class="text-gray-600 text-sm">Booked</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gray-50 border-2 border-orange-500 rounded"></div>
+                                <span class="text-gray-600 text-sm">Today</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-5 h-5 bg-gray-50 rounded"></div>
+                                <span class="text-gray-600 text-sm">Past/Unavailable</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Time Selection -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step3">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Select Time</h2>
+                <p class="text-center text-gray-600 mb-6">
+                    Selected Date: <strong id="selectedDateDisplay">Please select a date first</strong>
+                </p>
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-2xl mx-auto">
+                    <p class="text-sm text-blue-800 text-center">
+                        <strong>Available Time Slots:</strong><br>
+                        <span id="timeSlotInfo">Select a date to see available times</span>
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="timeGrid">
+                    <!-- Time slots will be generated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Step 4: Personal Information -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step4">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Your Information</h2>
+                
+                <!-- Display View -->
+                <div id="detailsDisplayView" class="max-w-2xl mx-auto">
+                    <div class="bg-gradient-to-br from-pink-50 to-pink-100 rounded-2xl p-6 md:p-8 mb-4">
+                        <div class="mb-6">
+                            <label class="block mb-2 text-gray-600 font-semibold text-sm">Full Name</label>
+                            <div class="bg-white px-4 py-3 rounded-xl border-2 border-pink-200 font-semibold text-gray-800" id="displayFullName">Loading...</div>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <label class="block mb-2 text-gray-600 font-semibold text-sm">Phone Number</label>
+                            <div class="bg-white px-4 py-3 rounded-xl border-2 border-pink-200 font-semibold text-gray-800" id="displayPhoneNumber">Loading...</div>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block mb-2 text-gray-600 font-semibold text-sm">Email Address</label>
+                            <div class="bg-white px-4 py-3 rounded-xl border-2 border-pink-200 font-semibold text-gray-800" id="displayEmail">Loading...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button id="editDetailsBtn" class="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg transform hover:scale-105">
+                            <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                            </svg>
+                            Edit Details
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Edit View -->
+                <div id="detailsEditView" class="max-w-2xl mx-auto" style="display: none;">
+                    <form id="personalInfoForm" class="max-w-2xl mx-auto">
+                        <div class="mb-6">
+                            <label class="block mb-2 text-gray-700 font-bold" for="fullName">Full Name</label>
+                            <input type="text" id="fullName" class="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" placeholder="Enter your full name" required>
+                            <div class="error-message bg-red-50 text-red-600 p-3 rounded-lg mt-2" id="nameError">Please enter your full name</div>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <label class="block mb-2 text-gray-700 font-bold">Phone Number</label>
+                            <div class="flex gap-3">
+                                <select class="w-32 px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" id="countryCode">
+                                    <option value="+63">🇵🇭 +63</option>
+                                    <option value="+1">🇺🇸 +1</option>
+                                    <option value="+44">🇬🇧 +44</option>
+                                    <option value="+81">🇯🇵 +81</option>
+                                </select>
+                                <input type="tel" id="phoneNumber" class="flex-1 px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" placeholder="9123456789" required>
+                            </div>
+                            <div class="error-message bg-red-50 text-red-600 p-3 rounded-lg mt-2" id="phoneError">Please enter a valid phone number</div>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block mb-2 text-gray-700 font-bold" for="email">Email Address (Optional)</label>
+                            <input type="email" id="email" class="w-full px-4 py-3 border-2 border-gray-300 rounded-2xl focus:border-pink-500 focus:outline-none transition-all" placeholder="your.email@example.com">
+                        </div>
+                        
+                        <div class="flex gap-4 justify-center mt-6">
+                            <button type="button" id="cancelEditBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-8 py-3 rounded-full font-bold transition-all">
+                                Cancel
+                            </button>
+                            <button type="button" id="saveDetailsBtn" class="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- OTP Verification -->
+                <div class="otp-container text-center p-6 bg-pink-50 rounded-2xl mt-6 max-w-2xl mx-auto" id="otpContainer" style="display: none;">
+                    <h3 class="text-xl font-bold text-pink-600 mb-2">Verify Your Phone Number</h3>
+                    <p class="text-gray-600 mb-4">We've sent a verification code to <strong id="phoneDisplay"></strong></p>
+                    <div class="flex justify-center gap-3 mb-4">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input w-12 h-12 text-center text-2xl font-bold border-2 border-pink-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                    </div>
+                    <div class="text-gray-600 text-sm mb-2" id="otpTimer">
+                        Resend code in <span id="countdown">60</span>s or <span class="text-pink-600 cursor-pointer underline font-bold" id="resendOtp" style="display: none;" onclick="resendOTP()">Resend Now</span>
+                    </div>
+                    <div class="error-message bg-red-50 text-red-600 p-3 rounded-lg" id="otpError">Invalid verification code</div>
+                </div>
+            </div>
+
+            <!-- Step 5: Payment -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step5">
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Payment & Confirmation</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="payment-method border-2 border-pink-500 rounded-2xl p-6 text-center cursor-pointer transition-all bg-pink-50" data-method="gcash">
+                        <div class="text-2xl font-bold text-pink-600 mb-3">GC</div>
+                        <h4 class="font-bold text-lg mb-1">GCash</h4>
+                        <p class="text-gray-600 text-sm">Mobile Payment</p>
+                    </div>
+                    <div class="payment-method border-2 border-gray-300 rounded-2xl p-6 text-center cursor-pointer transition-all hover:border-pink-500" data-method="maya">
+                        <div class="text-2xl font-bold text-gray-600 mb-3">MY</div>
+                        <h4 class="font-bold text-lg mb-1">Maya (PayMaya)</h4>
+                        <p class="text-gray-600 text-sm">Digital Wallet</p>
+                    </div>
+                    <div class="payment-method border-2 border-gray-300 rounded-2xl p-6 text-center cursor-pointer transition-all hover:border-pink-500" data-method="bank">
+                        <div class="text-2xl font-bold text-gray-600 mb-3">BT</div>
+                        <h4 class="font-bold text-lg mb-1">Bank Transfer</h4>
+                        <p class="text-gray-600 text-sm">Direct Transfer</p>
+                    </div>
+                </div>
+
+                <!-- Payment Details -->
+                <div class="text-center mt-8" id="paymentDetails">
+                    <h3 class="text-xl font-bold mb-5">Scan QR Code to Pay</h3>
+                    <div class="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-2xl mx-auto mb-4 flex items-center justify-center relative overflow-hidden">
+                        <img id="paymentQrImage" src="" alt="Payment QR Code" class="hidden w-full h-full object-contain rounded-2xl">
+                        <div id="paymentQrPlaceholder" class="text-center px-4">
+                            <div class="text-3xl font-bold text-gray-400 mb-1">QR</div>
+                            <div id="paymentQrPlaceholderText" class="text-sm text-gray-500 leading-tight">No active QR code for the selected payment method.</div>
+                        </div>
+                    </div>
+                    <p id="paymentQrStatus" class="text-xs text-gray-500 mb-6 hidden">QR code last updated just now.</p>
+                    
+                    <div class="bg-pink-50 p-6 rounded-2xl mb-6 max-w-md mx-auto">
+                        <div class="flex justify-between mb-3 pb-3 border-b">
+                            <span class="text-gray-600">Design:</span>
+                            <span class="font-bold" id="paymentDesignName">Clean & Modern</span>
+                        </div>
+                        <div class="flex justify-between mb-3 pb-3 border-b">
+                            <span class="text-gray-600">Date:</span>
+                            <span class="font-bold" id="paymentDate">-</span>
+                        </div>
+                        <div class="flex justify-between mb-3 pb-3 border-b">
+                            <span class="text-gray-600">Time:</span>
+                            <span class="font-bold" id="paymentTime">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Reservation Fee (50%):</span>
+                            <span class="font-bold text-green-600" id="reservationAmount">₱149.50</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-yellow-50 border border-yellow-300 p-4 rounded-xl mb-6 max-w-md mx-auto">
+                        <p class="text-yellow-800 text-left">
+                            <strong>Payment Instructions:</strong><br>
+                            1. Scan the QR code with your <span id="selectedPaymentMethod">GCash</span> app<br>
+                            2. Pay the reservation amount<br>
+                            3. Take a screenshot of the receipt<br>
+                            4. Upload it below to confirm your booking
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Receipt Upload -->
+                <div class="receipt-upload border-2 border-dashed border-pink-500 rounded-2xl p-8 text-center cursor-pointer transition-all bg-pink-50/50 hover:bg-pink-50" id="receiptUpload" onclick="document.getElementById('receiptFile').click()">
+                    <div class="text-3xl font-bold text-pink-500 mb-3">Upload</div>
+                    <div class="text-gray-700 font-semibold mb-2">Click to upload payment receipt</div>
+                    <small class="text-gray-500">or drag and drop your screenshot here</small>
+                    <input type="file" id="receiptFile" class="hidden" accept="image/*">
+                </div>
+
+                <div id="uploadedReceipt" class="hidden">
+                    <!-- Uploaded file will be displayed here -->
+                </div>
+            </div>
+
+            <!-- Success Step -->
+            <div class="step-content bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6 text-center" id="successStep" style="display: none;">
+                <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-green-600 mb-6">Booking Submitted Successfully!</h2>
+                
+                <div class="bg-green-50 p-6 rounded-2xl mb-6 text-left max-w-2xl mx-auto">
+                    <h3 class="text-xl font-bold text-pink-600 mb-4">Booking Summary</h3>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Booking ID:</span>
+                        <span class="font-bold" id="bookingId">#DCAC-2024-001</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Design:</span>
+                        <span class="font-bold" id="summaryDesign">Clean & Modern</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Date:</span>
+                        <span class="font-bold" id="summaryDate">December 15, 2024</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Time:</span>
+                        <span class="font-bold" id="summaryTime">2:00 PM</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Total Amount:</span>
+                        <span class="font-bold" id="summaryTotal">₱299.00</span>
+                    </div>
+                    <div class="flex justify-between mb-3 pb-3 border-b">
+                        <span class="text-gray-600">Paid (Reservation):</span>
+                        <span class="font-bold" id="summaryPaid">₱149.50</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Remaining Balance:</span>
+                        <span class="font-bold text-green-600" id="summaryBalance">₱149.50</span>
+                    </div>
+                </div>
+
+                <div class="bg-green-50 border border-green-300 p-6 rounded-2xl mb-6 max-w-2xl mx-auto text-left">
+                    <h4 class="text-green-800 font-bold mb-4">What's Next?</h4>
+                    <ul class="text-green-800 list-disc pl-6 space-y-2">
+                        <li>Your booking is now <strong>pending approval</strong></li>
+                        <li>We'll review your payment receipt within 24 hours</li>
+                        <li>You'll receive a confirmation via SMS/Email</li>
+                        <li>Pay the remaining balance on your appointment day</li>
+                        <li>Bring a valid ID for verification</li>
+                    </ul>
+                </div>
+
+                <!-- Admin Calendar Status -->
+                <div id="calendarStatus" class="bg-blue-50 border border-blue-300 p-4 rounded-2xl mb-6 max-w-2xl mx-auto" style="display: none;">
+                    <!-- Status will be dynamically updated -->
+                </div>
+
+                <!-- Calendar Integration -->
+                <div class="bg-blue-50 border border-blue-300 p-6 rounded-2xl mb-6 max-w-2xl mx-auto">
+                    <h4 class="text-blue-800 font-bold mb-4 text-center">Add to Your Calendar</h4>
+                    <p class="text-blue-700 text-sm mb-4 text-center">Save your appointment to your personal calendar</p>
+                    <div class="flex gap-4 justify-center flex-wrap">
+                        <button onclick="addToGoogleCalendar(bookingData)" class="bg-white hover:bg-blue-50 border-2 border-blue-500 text-blue-600 px-6 py-3 rounded-full font-bold transition-all flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zM7 12h5v5H7v-5z"/>
+                            </svg>
+                            Add to Google Calendar
+                        </button>
+                        <button onclick="downloadICSFile(bookingData)" class="bg-white hover:bg-blue-50 border-2 border-blue-500 text-blue-600 px-6 py-3 rounded-full font-bold transition-all flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                            </svg>
+                            Download .ics File
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex gap-4 justify-center mt-8 flex-wrap">
+                    <button class="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-full font-bold transition-all" onclick="window.location.href='homepage.html'">Back to Home</button>
+                    <button class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold transition-all" onclick="downloadBookingDetails()">Download Details</button>
+                </div>
+            </div>
+
+            <!-- Step Navigation -->
+            <div class="flex justify-between items-center mt-8" id="stepNavigation">
+                <button class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-8 py-3 rounded-full font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" id="prevBtn" onclick="previousStep()" disabled>Previous</button>
+                <button class="bg-gradient-to-r from-pink-500 to-pink-400 hover:from-pink-600 hover:to-pink-500 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg" id="nextBtn" onclick="nextStep()">Next</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="google-calendar.js?v=2"></script>
+    <script src="book.js?v=2"></script>
+</body>
+</html>

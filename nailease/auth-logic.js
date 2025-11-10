@@ -1,32 +1,31 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"; 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"; 
 import { getFirestore, doc, getDoc, setDoc, collection, serverTimestamp,addDoc, deleteDoc, getDocs, query, orderBy, writeBatch
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"; 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; 
 
 // Import the layout renderer and listener attachment function
 import { renderClientLayout, attachClientDashboardListeners } from "./client_dashboard_layout.js"; 
-import { renderAdminLayout, attachAdminDashboardListeners, renderManageView } from "./admin_dashboard_layout.js"; 
+import { renderAdminLayout, attachAdminDashboardListeners, renderManageView, renderAppointmentsLayout, attachAppointmentsListeners, renderReceiptsLayout, attachReceiptsListeners, renderQRLayout, attachQRListeners } from "./admin_dashboard_layout.js"; 
 import { renderLoading, hideLoading, showContainer, hideContainer } from "./ui_manager.js";
 
 
 // firebase config and init
-const firebaseConfig = {
-    apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
-    authDomain: "nailease25.firebaseapp.com",
-    projectId: "nailease25",
-    storageBucket: "nailease25.firebasestorage.app",
-    messagingSenderId: "706150189317",
-    appId: "1:706150189317:web:82986edbd97f545282cf6c",
-    measurementId: "G-RE42B3FVRJ"
+export const firebaseConfig = {
+    apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+    authDomain: "nailease25.firebaseapp.com",
+    projectId: "nailease25",
+    storageBucket: "nailease25.firebasestorage.app",
+    messagingSenderId: "706150189317",
+    appId: "1:706150189317:web:82986edbd97f545282cf6c",
+    measurementId: "G-RE42B3FVRJ"
 };
 
-const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; //admin id
-const APP_ID = 'nailease25-iapt'; // firebase project id
-
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app); 
-const db = getFirestore(app);
+export const auth = getAuth(app); 
+export const db = getFirestore(app); // <-- EXPORT DB
+export const ADMIN_UID = 'xZfAuu3cQkelk25frtC96TdJQIJ2'; //admin id
+export const APP_ID = 'nailease25-iapt'; // firebase project id
 
 const SEND_OTP_URL = 'https://sendphoneforverification-2ldy5wz35q-uc.a.run.app/sendPhoneForVerification';
 const VERIFY_OTP_URL = 'https://us-central1-nailease25.cloudfunctions.net/verifyOtp'; 
@@ -34,129 +33,132 @@ const VERIFY_OTP_URL = 'https://us-central1-nailease25.cloudfunctions.net/verify
 //paths in the firestore
 const DESIGNS_COLLECTION = `content/${APP_ID}/designs`;
 const GALLERY_COLLECTION = `content/${APP_ID}/gallery`;
+const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+const QR_COLLECTION = `content/${APP_ID}/qrCodes`;
+const LIST_CALENDAR_EVENTS_URL = 'https://us-central1-nailease25.cloudfunctions.net/listCalendarEvents';
 
 
-function getClientDocRef(uid) {
+export function getClientDocRef(uid) {
     const clientsCollectionPath = `/artifacts/${APP_ID}/users/${uid}/clients`;
     return doc(collection(db, clientsCollectionPath), uid);
 }
 
 function getContentDocRef(collectionPath, id) {
-    return doc(db, collectionPath, id);
+    return doc(db, collectionPath, id);
 }
 
 async function sendPhoneForVerification(uid, phone) {
-    // (Existing Cloud Function call logic remains the same)
-    console.log(`[OTP] Calling live Cloud Function for phone: ${phone}`);
-    try {
-        // (fetch call to SEND_OTP_URL...)
-        const response = await fetch(SEND_OTP_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                phoneNumber: phone, 
-                uid: uid 
-            })
-        });
+    // (Existing Cloud Function call logic remains the same)
+    console.log(`[OTP] Calling live Cloud Function for phone: ${phone}`);
+    try {
+        // (fetch call to SEND_OTP_URL...)
+        const response = await fetch(SEND_OTP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                phoneNumber: phone, 
+                uid: uid 
+            })
+        });
 
-        const data = await response.json();
+        const data = await response.json();
 
-        if (response.ok) {
-            // SUCCESS: Show OTP input field
-            const otpSection = document.querySelector('#otpSection') || document.querySelector('#onboardOtpSection');
-            const sendOTPBtn = document.querySelector('#sendOTP') || document.querySelector('#onboardSendOtp');
+        if (response.ok) {
+            // SUCCESS: Show OTP input field
+            const otpSection = document.querySelector('#otpSection') || document.querySelector('#onboardOtpSection');
+            const sendOTPBtn = document.querySelector('#sendOTP') || document.querySelector('#onboardSendOtp');
 
-            if (otpSection) otpSection.classList.remove('hidden');
-            if (sendOTPBtn) sendOTPBtn.disabled = true;
+            if (otpSection) otpSection.classList.remove('hidden');
+            if (sendOTPBtn) sendOTPBtn.disabled = true;
 
-            alert(`SUCCESS: Code sent to ${phone}. Enter any 6 digits to verify.`);
-            return data; 
-        } else {
-            console.error("OTP Function Error Response:", data);
-            const errorMessage = data.message || "Failed to send code. Please try again.";
-            alert(errorMessage);
-            throw new Error(errorMessage);
-        }
-    } catch (error) {
-        console.error("NETWORK/COMMUNICATION FAILED:", error);
-        alert("Network error or server failed to respond. Please try again.");
-    }
+            alert(`SUCCESS: Code sent to ${phone}. Enter any 6 digits to verify.`);
+            return data; 
+        } else {
+            console.error("OTP Function Error Response:", data);
+            const errorMessage = data.message || "Failed to send code. Please try again.";
+            alert(errorMessage);
+            throw new Error(errorMessage);
+        }
+    } catch (error) {
+        console.error("NETWORK/COMMUNICATION FAILED:", error);
+        alert("Network error or server failed to respond. Please try again.");
+    }
 }
 
 async function verifyOTPAndSave(uid, name, phone, code) {
-    console.log(`[OTP] Attempting to verify code ${code} and save user data...`);
-    if (code.length !== 6) {
-        alert("Please enter a 6-digit code.");
-        return;
-    }
-    
-    try {
-        const user = auth.currentUser;
-        if (!user) { alert("Authentication state error. Please log in again."); return; }
-        const idToken = await user.getIdToken();
+    console.log(`[OTP] Attempting to verify code ${code} and save user data...`);
+    if (code.length !== 6) {
+        alert("Please enter a 6-digit code.");
+        return;
+    }
+    
+    try {
+        const user = auth.currentUser;
+        if (!user) { alert("Authentication state error. Please log in again."); return; }
+        const idToken = await user.getIdToken();
 
-        // 1. LIVE API CALL TO VERIFY OTP
-        const verifyResponse = await fetch(VERIFY_OTP_URL, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}` 
-            },
-            body: JSON.stringify({ phoneNumber: phone, otpCode: code })
-        });
-        
-        const verifyData = await verifyResponse.json();
+        // 1. LIVE API CALL TO VERIFY OTP
+        const verifyResponse = await fetch(VERIFY_OTP_URL, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}` 
+            },
+            body: JSON.stringify({ phoneNumber: phone, otpCode: code })
+        });
+        
+        const verifyData = await verifyResponse.json();
 
-        if (!verifyResponse.ok || verifyData.success !== true) {
-            alert("Verification failed. Invalid code or temporary issue. Please try again.");
-            console.error("Verification API Response:", verifyData);
-            return;
-        }
+        if (!verifyResponse.ok || verifyData.success !== true) {
+            alert("Verification failed. Invalid code or temporary issue. Please try again.");
+            console.error("Verification API Response:", verifyData);
+            return;
+        }
 
-        // 2. VERIFICATION SUCCEEDED - WRITE TO FIRESTORE
-        const clientData = {
-            name: name,
-            phone: phone,
-            isVerified: true,
-            onboardedAt: new Date().toISOString(),
-            lastUpdated: serverTimestamp()
-        };
-        await setDoc(getClientDocRef(uid), clientData);
-        console.log("Client data successfully saved/updated in Firestore.");
-        
-        // 3. Refresh UI to show main dashboard
-        alert("Verification successful! Your profile is complete.");
-        setTimeout(() => checkAndSetRole(auth.currentUser), 500); 
-        
-    } catch (error) {
-        console.error("Critical error during verification or data saving:", error);
-        alert("A critical error occurred. See console for details.");
-    }
+        // 2. VERIFICATION SUCCEEDED - WRITE TO FIRESTORE
+        const clientData = {
+            name: name,
+            phone: phone,
+            isVerified: true,
+            onboardedAt: new Date().toISOString(),
+            lastUpdated: serverTimestamp()
+        };
+        await setDoc(getClientDocRef(uid), clientData);
+        console.log("Client data successfully saved/updated in Firestore.");
+        
+        // 3. Refresh UI to show main dashboard
+        alert("Verification successful! Your profile is complete.");
+        setTimeout(() => checkAndSetRole(auth.currentUser), 500); 
+        
+    } catch (error) {
+        console.error("Critical error during verification or data saving:", error);
+        alert("A critical error occurred. See console for details.");
+    }
 }
 
 export async function updateClientName(uid, newName) {
-    try {
-        await setDoc(getClientDocRef(uid), { name: newName, lastUpdated: serverTimestamp() }, { merge: true });
-        alert("Name updated successfully!");
-        // Force UI refresh to show new name on dashboard
-        setTimeout(() => checkAndSetRole(auth.currentUser), 100); 
-    } catch (error) {
-        console.error("Error updating name:", error);
-        alert("Failed to save name. See console.");
-    }
+    try {
+        await setDoc(getClientDocRef(uid), { name: newName, lastUpdated: serverTimestamp() }, { merge: true });
+        alert("Name updated successfully!");
+        // Force UI refresh to show new name on dashboard
+        setTimeout(() => checkAndSetRole(auth.currentUser), 100); 
+    } catch (error) {
+        console.error("Error updating name:", error);
+        alert("Failed to save name. See console.");
+    }
 }
 
 // Clears the session and redirects to the login view.
 async function logoutUser() {
-    try {
-        await signOut(auth);
-        console.log("User signed out successfully.");
-        window.location.href = 'homepage.html'; 
+    try {
+        await signOut(auth);
+        console.log("User signed out successfully.");
+        window.location.href = 'homepage.html'; 
 
-    } catch (error) {
-        console.error("Logout error:", error);
-        window.location.href = 'homepage.html';
-    }
+    } catch (error) {
+        console.error("Logout error:", error);
+        window.location.href = 'homepage.html';
+    }
 }
 
 export const state = { 
@@ -164,6 +166,12 @@ export const state = {
     currentTab: 'designs', 
     designs: [], 
     gallery: [], 
+    bookings: [],
+    qrCodes: [],
+    calendarEvents: [],
+    calendarEventsLoaded: false,
+    calendarEventsLoading: false,
+    calendarEventsError: null,
     editingDesign: null,
     
     // NEW PAGINATION STATE
@@ -171,13 +179,22 @@ export const state = {
     promosCurrentPage: 1,
     credentialsCurrentPage: 1,
     promosActiveCurrentPage: 1, // State for active promo pagination
+    bookingStatusFilter: 'all',
+    appointmentsTab: 'list',
 }; 
 
 export function setPage(page, tab = 'designs', targetPage = 1, activePromoPage = 1) { 
     console.log(`Setting page to ${page}, tab to ${tab}, list page: ${targetPage}, active promo page: ${activePromoPage}`);
     
     state.currentPage = page;
-    state.currentTab = tab;
+
+    if (page === 'appointments') {
+        const safeTab = tab || 'list';
+        state.currentTab = safeTab;
+        state.appointmentsTab = safeTab;
+    } else {
+        state.currentTab = tab;
+    }
     
     // Reset editing state
     if (page === 'dashboard' || page === 'manage') {
@@ -199,21 +216,56 @@ export function setPage(page, tab = 'designs', targetPage = 1, activePromoPage =
 }
 
 export function setTab(tab) { 
-    // Reset page number to 1 when switching tabs
-    setPage(state.currentPage, tab, 1, 1); // Reset both list and active promo pages
+    // Reset page number to 1 when switching tabs
+    setPage(state.currentPage, tab, 1, 1); // Reset both list and active promo pages
+}
+
+export function setAppointmentsTab(tab) {
+    setPage('appointments', tab || 'list');
+}
+
+function setBookingStatusFilter(filter) {
+    state.bookingStatusFilter = filter;
+    window.checkAndSetRole(auth.currentUser);
 }
 
 async function fetchContent() {
-    try {
-        // Fetch Designs
-        const designsQuery = query(collection(db, DESIGNS_COLLECTION), orderBy('timestamp', 'desc'));
-        const designsSnapshot = await getDocs(designsQuery);
-        state.designs = designsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    try {
+        // Fetch Designs
+        const designsQuery = query(collection(db, DESIGNS_COLLECTION), orderBy('timestamp', 'desc'));
+        const designsSnapshot = await getDocs(designsQuery);
+        state.designs = designsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         // Fetch Gallery (Promo and Credentials)
         const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
         const gallerySnapshot = await getDocs(galleryQuery);
         state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Fetch QR Codes
+        const qrQuery = query(collection(db, QR_COLLECTION), orderBy('timestamp', 'desc'));
+        const qrSnapshot = await getDocs(qrQuery);
+        state.qrCodes = qrSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Fetch Bookings (Admin Appointments)
+        const bookingsQuery = query(collection(db, BOOKINGS_COLLECTION), orderBy('createdAt', 'desc'));
+        const bookingsSnapshot = await getDocs(bookingsQuery);
+        state.bookings = bookingsSnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            const createdAt = data.createdAt && typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : null);
+            const updatedAt = data.updatedAt && typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt) : null);
+
+            const appointmentDate = data.selectedDate ? new Date(`${data.selectedDate}T00:00:00`) : null;
+
+            return {
+                id: docSnap.id,
+                ...data,
+                createdAt,
+                updatedAt,
+                appointmentDate
+            };
+        });
+
+        await refreshCalendarEvents(true);
 
     } catch (error) {
         console.error("Error fetching admin content:", error);
@@ -221,25 +273,25 @@ async function fetchContent() {
 }
 
 export async function saveDesign(id, data) { 
-    try {
-        const payload = { 
-            ...data, 
-            price: parseFloat(data.price), 
-            timestamp: serverTimestamp() 
-        };
-        const action = id ? 'updated' : 'added';
-        const title = data.title || 'New Design';
+    try {
+        const payload = { 
+            ...data, 
+            price: parseFloat(data.price), 
+            timestamp: serverTimestamp() 
+        };
+        const title = data.title || 'New Design';
 
-        if (id) {
-            await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), payload, { merge: true });
-        } else {
-            await addDoc(collection(db, DESIGNS_COLLECTION), payload);
-        }
-        
+        if (id) {
+            await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), payload, { merge: true });
+        } else {
+            await addDoc(collection(db, DESIGNS_COLLECTION), payload);
+        }
+        
         state.editingDesign = null;
         window.checkAndSetRole(auth.currentUser); 
 
         // SWEETALERT SUCCESS NOTIFICATION
+        const action = id ? 'updated' : 'created';
         Swal.fire({
             icon: 'success',
             title: 'Success!',
@@ -253,248 +305,680 @@ export async function saveDesign(id, data) {
         Swal.fire({
             icon: 'error',
             title: 'Oops...',
-            text: 'Failed to save design. Check the console for details.',
-        });
-    }
-} 
-/**
- * Updates design Title/Price directly from the inline list item form.
- * @param {HTMLFormElement} form - The form element containing the inputs.
- * @param {string} id - The document ID of the design.
- */
-export async function updateDesignInline(form, id) { 
-    // Note: The form object is passed directly from the onclick handler in the layout.
-    const newTitle = form.querySelector(`#design-title-${id}`).value;
-    const newPrice = form.querySelector(`#design-price-${id}`).value;
-    
-    if (!newTitle || !newPrice) {
-        Swal.fire('Error', 'Title and Price are required.', 'warning');
-        return;
-    }
-
-    try {
-        const payload = { 
-            title: newTitle, 
-            price: parseFloat(newPrice),
-            timestamp: serverTimestamp() 
-        };
-
-        await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), payload, { merge: true });
-        
-        window.checkAndSetRole(auth.currentUser); 
-
-        // CRITICAL: Call resetSaveButton to update data attributes and disable the button after save
-        window.resetSaveButton(id); 
-
-        Swal.fire({
-            icon: 'success',
-            title: 'Design Updated!',
-            text: `Changes to "${newTitle}" saved.`,
-            showConfirmButton: false,
-            timer: 1500
-        });
-
-    } catch (error) {
-        console.error("Error updating design inline:", error);
-        Swal.fire({
-            icon: 'error',
-            title: 'Oops...',
-            text: 'Failed to update design.',
+            text: 'Failed to save design.',
         });
     }
 }
 
-export async function deleteDesign(id) { 
-    const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: "You won't be able to revert this!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, delete it!'
-    });
+/**
+ * Updates design Title/Price directly from the inline list item form.
+ * @param {HTMLFormElement} form - The form element containing the inputs.
+ * @param {string} id - The document ID of the design.
+ */
+export async function updateDesignInline(form, id) { 
+    // Note: The form object is passed directly from the onclick handler in the layout.
+    const newTitle = form.querySelector(`#design-title-${id}`).value;
+    const newPrice = form.querySelector(`#design-price-${id}`).value;
+    
+    if (!newTitle || !newPrice) {
+        Swal.fire('Error', 'Title and Price are required.', 'warning');
+        return;
+    }
 
-    if (result.isConfirmed) {
-        try {
-            await deleteDoc(getContentDocRef(DESIGNS_COLLECTION, id));
-            window.checkAndSetRole(auth.currentUser); 
-            Swal.fire(
-                'Deleted!',
-                'The design has been deleted.',
-                'success'
-            );
-        } catch (error) {
-            console.error("Error deleting design:", error);
-            Swal.fire('Failed!', 'The design could not be deleted.', 'error');
-        }
-    }
+    try {
+        const payload = { 
+            title: newTitle, 
+            price: parseFloat(newPrice),
+            timestamp: serverTimestamp() 
+        };
+
+        await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), payload, { merge: true });
+        
+        window.checkAndSetRole(auth.currentUser); 
+
+        // CRITICAL: Call resetSaveButton to update data attributes and disable the button after save
+        window.resetSaveButton(id); 
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Design Updated!',
+            text: `Changes to "${newTitle}" saved.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
+
+    } catch (error) {
+        console.error("Error updating design inline:", error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Oops...',
+            text: 'Failed to update design.',
+        });
+    }
+}
+
+export async function deleteDesign(id) { 
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            await deleteDoc(getContentDocRef(DESIGNS_COLLECTION, id));
+            window.checkAndSetRole(auth.currentUser); 
+            Swal.fire(
+                'Deleted!',
+                'The design has been deleted.',
+                'success'
+            );
+        } catch (error) {
+            console.error("Error deleting design:", error);
+            Swal.fire('Failed!', 'The design could not be deleted.', 'error');
+        }
+    }
 } 
 
 
 export async function saveGalleryItem(type, data) { 
-    try {
-        // --- FIX: Conditionally include the isActive field to avoid writing 'undefined' to Firestore ---
-        const activeField = type === 'promo' ? { isActive: false } : {}; 
-        
-        const payload = { 
-            type: type, 
-            imageUrl: data.imageUrl,
-            ...activeField, // Spread the field only if it's a promo
-            timestamp: serverTimestamp() 
-        };
+    try {
+        const activeField = type === 'promo' ? { isActive: false } : {}; 
+        
+        const payload = { 
+            type: type, 
+            imageUrl: data.imageUrl,
+            ...activeField, // Spread the field only if it's a promo
+            timestamp: serverTimestamp() 
+        };
 
-        await addDoc(collection(db, GALLERY_COLLECTION), payload);
-        window.checkAndSetRole(auth.currentUser); 
+        await addDoc(collection(db, GALLERY_COLLECTION), payload);
+        window.checkAndSetRole(auth.currentUser); 
 
-        // SWEETALERT SUCCESS NOTIFICATION
-        Swal.fire({
-            icon: 'success',
-            title: 'Added!',
-            text: `New ${type} image successfully added.`,
-            showConfirmButton: false,
-            timer: 1500
-        });
-    } catch (error) {
-        console.error(`Error saving ${type}:`, error);
+        // SWEETALERT SUCCESS NOTIFICATION
+        Swal.fire({
+            icon: 'success',
+            title: 'Added!',
+            text: `New ${type} image successfully added.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
+    } catch (error) {
+        console.error(`Error saving ${type}:`, error);
         Swal.fire({
             icon: 'error',
             title: 'Oops...',
-            text: 'Failed to save ${type}. Check console.',
+            text: `Failed to save ${type}. Check console.`,
         });
-    }
+    }
 } 
 
 export async function deleteGalleryItem(id) { 
-    const result = await Swal.fire({
-        title: 'Are you sure?',
-        text: "You won't be able to revert this!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, delete it!'
-    });
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+    });
 
-    if (result.isConfirmed) {
-        try {
-            await deleteDoc(getContentDocRef(GALLERY_COLLECTION, id));
-            window.checkAndSetRole(auth.currentUser);
-            Swal.fire(
-                'Deleted!',
-                'The gallery item has been deleted.',
-                'success'
-            );
+    if (result.isConfirmed) {
+        try {
+            await deleteDoc(getContentDocRef(GALLERY_COLLECTION, id));
+            window.checkAndSetRole(auth.currentUser);
+            Swal.fire(
+                'Deleted!',
+                'The gallery item has been deleted.',
+                'success'
+            );
         } catch (error) {
             console.error("Error deleting gallery item:", error);
             Swal.fire('Failed!', 'The item could not be deleted.', 'error');
         }
     }
+}
+
+export async function saveQRCode(id, data) {
+    try {
+        const payload = {
+            name: (data.name || '').trim(),
+            imageUrl: data.imageUrl || null,
+            imageDataUrl: data.imageDataUrl || null,
+            originalFilename: data.originalFilename || null,
+            active: typeof data.active === 'boolean' ? data.active : true,
+            originalUrl: data.originalUrl || data.imageUrl || null,
+            timestamp: serverTimestamp()
+        };
+
+        if (id) {
+            await setDoc(getContentDocRef(QR_COLLECTION, id), payload, { merge: true });
+        } else {
+            await addDoc(collection(db, QR_COLLECTION), payload);
+        }
+        
+        window.checkAndSetRole(auth.currentUser);
+
+        // SWEETALERT SUCCESS NOTIFICATION
+        const action = id ? 'updated' : 'created';
+        Swal.fire({
+            icon: 'success',
+            title: 'Success!',
+            text: `QR Code "${data.name}" successfully ${action}.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
+
+    } catch (error) {
+        console.error("Error saving QR code:", error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Oops...',
+            text: 'Failed to save QR code. Check console.',
+        });
+    }
+}
+
+export async function toggleQRCodeActive(id, nextActive) {
+    try {
+        await setDoc(getContentDocRef(QR_COLLECTION, id), { active: !!nextActive, updatedAt: serverTimestamp() }, { merge: true });
+        window.checkAndSetRole(auth.currentUser);
+    } catch (error) {
+        console.error('Error toggling QR active state:', error);
+        Swal.fire('Failed!', 'Could not update QR status.', 'error');
+    }
+}
+
+// expose helpers
+window.toggleQRCodeActive = toggleQRCodeActive;
+
+export async function deleteQRCode(id) {
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            await deleteDoc(getContentDocRef(QR_COLLECTION, id));
+            window.checkAndSetRole(auth.currentUser);
+            Swal.fire(
+                'Deleted!',
+                'The QR code has been deleted.',
+                'success'
+            );
+        } catch (error) {
+            console.error("Error deleting QR code:", error);
+            Swal.fire('Failed!', 'The QR code could not be deleted.', 'error');
+        }
+    }
 } 
 
 export async function toggleActivePromo(id, isActive) { 
-    try {
-        // Set the target promo's status
-        await setDoc(getContentDocRef(GALLERY_COLLECTION, id), { isActive: isActive }, { merge: true });
-        
-        // When toggling, reset the active promo page to 1 so the newly active promo shows immediately
-        if(isActive) {
-            state.promosActiveCurrentPage = 1;
-        }
-        
-        window.checkAndSetRole(auth.currentUser); 
-        
-        // SWEETALERT CONFIRMATION
-        Swal.fire({
-            icon: 'info',
-            title: 'Status Updated',
-            text: `Promo is now ${isActive ? 'ACTIVE' : 'INACTIVE'} on the site.`,
-            showConfirmButton: false,
-            timer: 1500
-        });
+    try {
+        // Set the target promo's status
+        await setDoc(getContentDocRef(GALLERY_COLLECTION, id), { isActive: isActive }, { merge: true });
+        
+        // When toggling, reset the active promo page to 1 so the newly active promo shows immediately
+        if(isActive) {
+            state.promosActiveCurrentPage = 1;
+        }
+        
+        window.checkAndSetRole(auth.currentUser); 
+        
+        // SWEETALERT CONFIRMATION
+        Swal.fire({
+            icon: 'info',
+            title: 'Status Updated',
+            text: `Promo is now ${isActive ? 'ACTIVE' : 'INACTIVE'} on the site.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
 
-    } catch (error) {
-        console.error("Error toggling promo status:", error);
-        Swal.fire('Failed!', 'Could not update promo status.', 'error');
-    }
+    } catch (error) {
+        console.error("Error toggling promo status:", error);
+        Swal.fire('Failed!', 'Could not update promo status.', 'error');
+    }
 } 
 
 export async function toggleFeaturedDesign(id, isFeatured) { 
+    try {
+        await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), { isFeatured: isFeatured }, { merge: true });
+        
+        window.checkAndSetRole(auth.currentUser); 
+        
+        Swal.fire({
+            icon: 'info',
+            title: 'Status Updated',
+            text: `Design is now ${isFeatured ? 'FEATURED' : 'STANDARD'}.`,
+            showConfirmButton: false,
+            timer: 1500
+        });
+
+    } catch (error) {
+        console.error("Error toggling featured status:", error);
+        Swal.fire('Failed!', 'Could not update featured status.', 'error');
+    }
+} 
+
+export async function updateBookingStatus(bookingId, newStatus) {
     try {
-        await setDoc(getContentDocRef(DESIGNS_COLLECTION, id), { isFeatured: isFeatured }, { merge: true });
-        
-        window.checkAndSetRole(auth.currentUser); 
-        
+        // NOTE: The 'cancelled' status is removed from the form in admin_dashboard_layout.js, 
+        // but the logic here remains to handle it if a user attempts to set it manually or it exists in the database.
+        const normalizedStatus = (newStatus || 'pending').toLowerCase();
+        const booking = state.bookings.find(b => b.id === bookingId);
+
+        const batch = writeBatch(db);
+        const bookingRef = doc(db, BOOKINGS_COLLECTION, bookingId);
+        const updates = {
+            status: normalizedStatus,
+            updatedAt: serverTimestamp()
+        };
+
+        batch.set(bookingRef, updates, { merge: true });
+
+        if (booking?.userId) {
+            const userBookingRef = doc(db, 'artifacts', APP_ID, 'users', booking.userId, 'bookings', bookingId);
+            batch.set(userBookingRef, updates, { merge: true });
+        }
+
+        await batch.commit();
+
         Swal.fire({
-            icon: 'info',
-            title: 'Status Updated',
-            text: `Design is now ${isFeatured ? 'FEATURED' : 'STANDARD'}.`,
-            showConfirmButton: false,
-            timer: 1500
+            icon: 'success',
+            title: 'Booking Updated',
+            text: `Status updated to ${normalizedStatus.toUpperCase()}.`,
+            timer: 1500,
+            showConfirmButton: false
         });
 
+        setTimeout(() => window.checkAndSetRole(auth.currentUser), 300);
+
     } catch (error) {
-        console.error("Error toggling featured status:", error);
-        Swal.fire('Failed!', 'Could not update featured status.', 'error');
+        console.error('Error updating booking status:', error);
+        Swal.fire('Failed!', 'Could not update booking status.', 'error');
     }
-} 
+}
+
+export async function deleteBooking(bookingId) {
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            await deleteDoc(doc(db, BOOKINGS_COLLECTION, bookingId));
+            
+            // Also delete from user's bookings subcollection if it exists
+            const booking = state.bookings.find(b => b.id === bookingId);
+            if (booking?.userId) {
+                const userBookingRef = doc(db, 'artifacts', APP_ID, 'users', booking.userId, 'bookings', bookingId);
+                await deleteDoc(userBookingRef);
+            }
+            
+            window.checkAndSetRole(auth.currentUser); 
+            Swal.fire(
+                'Deleted!',
+                'The booking has been deleted.',
+                'success'
+            );
+        } catch (error) {
+            console.error("Error deleting booking:", error);
+            Swal.fire('Failed!', 'The booking could not be deleted.', 'error');
+        }
+    }
+}
+//
+export async function createWalkInBooking(formData) {
+    const {
+        clientName,
+        clientPhone,
+        clientEmail = '',
+        selectedDate,
+        selectedTime,
+        designName = 'Walk-in Service',
+        notes = ''
+    } = formData;
+
+    // Check for required fields
+    if (!clientName || !clientPhone || !selectedDate || !selectedTime) {
+        Swal.fire('Incomplete Details', 'Please fill out name, phone, date, and time.', 'warning');
+        return;
+    }
+    
+    // Validate time format to ensure it's on the hour (e.g., 10:00, not 10:20)
+    const timeParts = selectedTime.split(':');
+    if (timeParts.length === 2 && parseInt(timeParts[1], 10) !== 0) {
+        Swal.fire('Invalid Time', 'Please select a time that is on the hour (e.g., 10:00, 11:00).', 'warning');
+        return;
+    }
+
+    try {
+        // Convert time from 24-hour format (08:00) to 12-hour format (8:00 AM) to match user bookings
+        let formattedTime = selectedTime;
+        if (selectedTime && !selectedTime.includes('AM') && !selectedTime.includes('PM')) {
+            // It's in 24-hour format, convert to 12-hour format
+            const [hours, minutes] = selectedTime.split(':');
+            const hour24 = parseInt(hours, 10);
+            let hour12 = hour24;
+            let period = 'AM';
+            
+            if (hour24 === 0) {
+                hour12 = 12;
+                period = 'AM';
+            } else if (hour24 === 12) {
+                hour12 = 12;
+                period = 'PM';
+            } else if (hour24 > 12) {
+                hour12 = hour24 - 12;
+                period = 'PM';
+            } else {
+                hour12 = hour24;
+                period = 'AM';
+            }
+            
+            formattedTime = `${hour12}:00 ${period}`;
+        }
+        
+        // Check for duplicate appointments BEFORE saving (use formatted time)
+        const { query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const duplicateQuery = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', selectedDate),
+            where('selectedTime', '==', formattedTime)
+        );
+        const duplicateSnapshot = await getDocs(duplicateQuery);
+        
+        const existingBookings = [];
+        duplicateSnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Only consider non-cancelled appointments as conflicts
+            if (data.status !== 'cancelled') {
+                existingBookings.push(data);
+            }
+        });
+        
+        if (existingBookings.length > 0) {
+            const existingBooking = existingBookings[0];
+            Swal.fire({
+                icon: 'warning',
+                title: 'Time Slot Already Booked',
+                html: `
+                    <div style="text-align: left; padding: 10px 0;">
+                        <p style="margin-bottom: 15px; color: #333;">
+                            This time slot is already booked:
+                        </p>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                            <p style="margin: 5px 0;"><strong>Date:</strong> ${selectedDate}</p>
+                            <p style="margin: 5px 0;"><strong>Time:</strong> ${formattedTime}</p>
+                            <p style="margin: 5px 0;"><strong>Booked by:</strong> ${existingBooking.clientName || 'Unknown'}</p>
+                            <p style="margin: 5px 0;"><strong>Status:</strong> ${existingBooking.status || 'pending'}</p>
+                        </div>
+                        <p style="color: #666; font-size: 14px;">
+                            Please select a different date and time.
+                        </p>
+                    </div>
+                `,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#ec4899'
+            });
+            return;
+        }
+        
+        // --- REMOVED RESERVATION FEE LOGIC ---
+        // const reservationFee = formData.reservationFee ? Number(formData.reservationFee) : 0;
+        const totalAmount = formData.totalAmount ? Number(formData.totalAmount) : 0;
+        const bookingId = `WALK-${Date.now().toString(36).toUpperCase()}`;
+
+        const payload = {
+            bookingId,
+            clientName,
+            clientPhone,
+            clientEmail,
+            selectedDate,
+            selectedTime: formattedTime, // Use converted 12-hour format to match user bookings
+            designName,
+            status: 'confirmed',
+            source: 'walk-in',
+            notes,
+            totalAmount,
+            amountPaid: 0, // Set to 0 since reservation fee is removed
+            paymentMethod: formData.paymentMethod || 'cash',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+
+        await addDoc(collection(db, BOOKINGS_COLLECTION), payload);
+
+        // Prepare booking data for Google Calendar (use formatted time)
+        const calendarBookingData = {
+            selectedDate,
+            selectedTime: formattedTime, // Use converted 12-hour format
+            design: {
+                name: designName,
+                price: totalAmount
+            },
+            personalInfo: {
+                fullName: clientName,
+                phone: clientPhone,
+                email: clientEmail
+            },
+            bookingId,
+            notes,
+            source: 'walk-in' // Mark as walk-in booking
+        };
+
+        // Automatically create calendar event in admin's Google Calendar
+        let calendarEventCreated = false;
+        if (typeof window.createAdminCalendarEvent === 'function') {
+            try {
+                const calendarResult = await window.createAdminCalendarEvent(calendarBookingData);
+                if (calendarResult && calendarResult.success) {
+                    calendarEventCreated = true;
+                    console.log('Walk-in appointment added to Google Calendar:', calendarResult.eventLink);
+                } else {
+                    console.warn('Calendar event creation failed:', calendarResult?.message);
+                }
+            } catch (error) {
+                console.error('Error creating calendar event for walk-in:', error);
+            }
+        }
+
+        // Show success message with Google Calendar status
+        const calendarStatusHtml = calendarEventCreated 
+            ? `<div style="background: #d1fae5; border: 2px solid #10b981; padding: 12px; border-radius: 8px; margin: 15px 0;">
+                <p style="color: #065f46; font-weight: 600; margin: 0;">
+                    ✅ Added to Google Calendar successfully!
+                </p>
+            </div>`
+            : `<div style="background: #fef3c7; border: 2px solid #f59e0b; padding: 12px; border-radius: 8px; margin: 15px 0;">
+                <p style="color: #92400e; margin: 0;">
+                    ⚠️ Calendar event not created. You can add it manually below.
+                </p>
+            </div>`;
+        
+        Swal.fire({
+            icon: 'success',
+            title: 'Walk-in Appointment Saved!',
+            html: `
+                <div style="text-align: center; padding: 10px 0;">
+                    <p style="margin-bottom: 20px; font-size: 16px; color: #333;">
+                        <strong>${clientName}'s</strong> appointment has been recorded successfully.
+                    </p>
+                    ${calendarStatusHtml}
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; margin: 20px 0;">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" style="margin: 0 auto 10px; display: block;">
+                            <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zm0-13H5V6h14v1z"/>
+                            <path d="M7 11h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm-8 4h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"/>
+                        </svg>
+                        <p style="color: white; font-weight: 600; margin: 0; font-size: 18px;">
+                            Add to Google Calendar
+                        </p>
+                        <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0; font-size: 13px;">
+                            Click below to open Google Calendar with appointment details
+                        </p>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '<i class="fa fa-calendar"></i> Go to Google Calendar',
+            cancelButtonText: 'Close',
+            confirmButtonColor: '#4285f4',
+            cancelButtonColor: '#6c757d',
+            reverseButtons: true,
+            width: '500px'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Open Google Calendar with pre-filled event details
+                if (typeof window.addToGoogleCalendar === 'function') {
+                    window.addToGoogleCalendar(calendarBookingData);
+                } else {
+                    // Fallback: create URL directly if function not available
+                    const calendarUrl = window.createGoogleCalendarEvent 
+                        ? window.createGoogleCalendarEvent(calendarBookingData)
+                        : `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Nail Appointment - ${designName}`)}&dates=${new Date(selectedDate).toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${new Date(new Date(selectedDate).getTime() + 60 * 60 * 1000).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+                    window.open(calendarUrl, '_blank');
+                }
+            }
+        });
+
+        setTimeout(() => window.checkAndSetRole(auth.currentUser), 400);
+
+    } catch (error) {
+        console.error('Error creating walk-in booking:', error);
+        Swal.fire('Failed!', 'Could not save walk-in booking.', 'error');
+    }
+}
+//
+async function refreshCalendarEvents(force = false) {
+    const user = auth.currentUser;
+    const isAdmin = user && user.uid === ADMIN_UID;
+
+    if (!isAdmin) {
+        return state.calendarEvents;
+    }
+
+    if (!force && (state.calendarEventsLoaded || state.calendarEventsLoading)) {
+        return state.calendarEvents;
+    }
+
+    if (state.calendarEventsLoading) {
+        return state.calendarEvents;
+    }
+
+    try {
+        state.calendarEventsLoading = true;
+        state.calendarEventsError = null;
+
+        const idToken = await user.getIdToken();
+        const now = new Date();
+        const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 3, 1);
+
+        const params = new URLSearchParams({
+            calendarId: 'primary',
+            timeMin: defaultStart.toISOString(),
+            timeMax: defaultEnd.toISOString()
+        });
+
+        const response = await fetch(`${LIST_CALENDAR_EVENTS_URL}?${params.toString()}`, {
+            headers: {
+                'Authorization': `Bearer ${idToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || `Calendar API returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        state.calendarEvents = Array.isArray(data.events) ? data.events : [];
+        state.calendarEventsLoaded = true;
+
+        return state.calendarEvents;
+
+    } catch (error) {
+        console.error('Failed to fetch calendar events:', error);
+        state.calendarEventsError = error?.message || 'Unable to load Google Calendar events. Check setup and try again.';
+        return [];
+    } finally {
+        state.calendarEventsLoading = false;
+    }
+}
 
 export function editDesign(id) { 
-    const designToEdit = state.designs.find(d => d.id === id);
-    if (designToEdit) {
-        // Set the editing data
-        state.editingDesign = designToEdit;
-        
-        // Temporarily change the page state to an arbitrary value, then back to force the re-render.
-        // This is a common pattern to bypass browser caching of the innerHTML structure.
-        state.currentPage = 'editing'; 
-        state.currentTab = 'designs';
-        window.checkAndSetRole(auth.currentUser);
+    const designToEdit = state.designs.find(d => d.id === id);
+    if (designToEdit) {
+        // Set the editing data
+        state.editingDesign = designToEdit;
+        
+        // Temporarily change the page state to an arbitrary value, then back to force the re-render.
+        // This is a common pattern to bypass browser caching of the innerHTML structure.
+        state.currentPage = 'editing'; 
+        state.currentTab = 'designs';
+        window.checkAndSetRole(auth.currentUser);
 
-        // Immediately follow up with the correct page state to display the form.
-        // This second call isn't necessary in all environments, but adds robustness.
-        // Forcing a full re-render is usually enough.
-        
-    }
+        // Immediately follow up with the correct page state to display the form.
+        // This second call isn't necessary in all environments, but adds robustness.
+        // Forcing a full re-render is usually enough.
+        
+    }
 } 
 
- /**
+ /**
  * Attaches listeners for the Client Onboarding Form.
  * Note: These elements are part of the innerHTML string in renderApp.
  * @param {object} user - The current Firebase user.
  */
 function attachOnboardingListeners(user) {
-    const onboardNameInput = document.getElementById('onboardName');
-    const onboardPhoneInput = document.getElementById('onboardPhone');
-    const onboardOtpCodeInput = document.getElementById('onboardOtpCode');
-    const onboardSendBtn = document.getElementById('onboardSendOtp');
-    const onboardVerifyBtn = document.getElementById('onboardVerifyOtp');
+    const onboardNameInput = document.getElementById('onboardName');
+    const onboardPhoneInput = document.getElementById('onboardPhone');
+    const onboardOtpCodeInput = document.getElementById('onboardOtpCode');
+    const onboardSendBtn = document.getElementById('onboardSendOtp');
+    const onboardVerifyBtn = document.getElementById('onboardVerifyOtp');
 
-    document.getElementById('logoutBtn').addEventListener('click', logoutUser); // Global Logout
+    document.getElementById('logoutBtn').addEventListener('click', logoutUser); // Global Logout
 
-     // Send OTP Handler
-    onboardSendBtn.addEventListener('click', () => {
-        const name = onboardNameInput.value.trim();
-        const phone = onboardPhoneInput.value.trim();
-         if (name && phone) {
-             sendPhoneForVerification(user.uid, phone);
-         } else {
-            alert('Please enter both your name and phone number.');
-         }
-    });
+     // Send OTP Handler
+    onboardSendBtn.addEventListener('click', () => {
+        const name = onboardNameInput.value.trim();
+        const phone = onboardPhoneInput.value.trim();
+         if (name && phone) {
+             sendPhoneForVerification(user.uid, phone);
+         } else {
+            alert('Please enter both your name and phone number.');
+         }
+    });
 
-    // Verify OTP Handler
-     onboardVerifyBtn.addEventListener('click', () => {
-         const name = onboardNameInput.value.trim();
-        const phone = onboardPhoneInput.value.trim();
-        const code = onboardOtpCodeInput.value.trim();
+    // Verify OTP Handler
+     onboardVerifyBtn.addEventListener('click', () => {
+         const name = onboardNameInput.value.trim();
+        const phone = onboardPhoneInput.value.trim();
+        const code = onboardOtpCodeInput.value.trim();
 
-        if (name && phone && code) {
-            verifyOTPAndSave(user.uid, name, phone, code);
-        } else {
-             alert('Please ensure all fields are filled.');
-        }
-     });
+        if (name && phone && code) {
+            verifyOTPAndSave(user.uid, name, phone, code);
+        } else {
+             alert('Please ensure all fields are filled.');
+        }
+     });
 }
 
 /**
@@ -503,13 +987,13 @@ function attachOnboardingListeners(user) {
  * @param {object} clientData - The existing client data from Firestore, or null.
  */
 function renderApp(user, clientData) {
-    const appContent = document.getElementById('app-content'); 
-    const isAdmin = user && user.uid === ADMIN_UID;
-    const isClientOnboarded = clientData && clientData.isVerified;
+    const appContent = document.getElementById('app-content'); 
+    const isAdmin = user && user.uid === ADMIN_UID;
+    const isClientOnboarded = clientData && clientData.isVerified;
 
-    
-    hideContainer('auth-card'); 
-    showContainer('app-content'); 
+    
+    hideContainer('auth-card'); 
+    showContainer('app-content'); 
 
     if (isAdmin) {
         if (state.currentPage === 'manage' || state.currentPage === 'editing') { 
@@ -517,51 +1001,60 @@ function renderApp(user, clientData) {
             if (window.attachContentFormListeners) {
                 window.attachContentFormListeners();
             }
+            attachAdminDashboardListeners(logoutUser, user); 
+        } else if (state.currentPage === 'appointments') {
+            renderAppointmentsLayout(appContent, user, state);
+            attachAppointmentsListeners();
+        } else if (state.currentPage === 'receipts') {
+            renderReceiptsLayout(appContent, user, state);
+            attachReceiptsListeners();
+        } else if (state.currentPage === 'qr') {
+            renderQRLayout(appContent, user, state);
+            attachQRListeners();
         } else {
             renderAdminLayout(appContent, user); 
+            attachAdminDashboardListeners(logoutUser, user); 
         }
-        
-        attachAdminDashboardListeners(logoutUser, user); 
 
-    } else {
-        // CLIENT FLOW
-        if (isClientOnboarded) {
-           renderClientLayout(document.getElementById('app-content'), user, clientData);
-            
-            attachClientDashboardListeners(user, clientData, logoutUser, sendPhoneForVerification, verifyOTPAndSave, updateClientName);
+    } else {
+        // CLIENT FLOW
+        if (isClientOnboarded) {
+           renderClientLayout(document.getElementById('app-content'), user, clientData);
+            
+            attachClientDashboardListeners(user, clientData, logoutUser, sendPhoneForVerification, verifyOTPAndSave, updateClientName);
 
-    } else {
-        // RENDER CLIENT ONBOARDING/PROFILE FORM
-            document.getElementById('app-content').innerHTML = `
-                    <div class="max-w-md mx-auto p-6 bg-white rounded-xl shadow-lg mt-8">
-                        <h2 class="text-2xl font-bold text-pink-600 mb-4">Complete Your Profile</h2>
-                        <p class="text-sm text-gray-500 mb-6">We need your name and a verified phone number for booking and SMS reminders (via iprogsms).</p>
-                            
-                            <div class="mb-4">
-                            <label for="onboardName" class="block text-sm font-medium text-gray-700">Name</label>
-                            <input type="text" id="onboardName" value="${user.displayName || ''}" placeholder="Your Full Name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border">
-                            </div>
+    } else {
+        // RENDER CLIENT ONBOARDING/PROFILE FORM
+            document.getElementById('app-content').innerHTML = `
+                    <div class="max-w-md mx-auto p-6 bg-white rounded-xl shadow-lg mt-8">
+                        <h2 class="text-2xl font-bold text-pink-600 mb-4">Complete Your Profile</h2>
+                        <p class="text-sm text-gray-500 mb-6">We need your name and a verified phone number for booking and SMS reminders (via iprogsms).</p>
+                            
+                            <div class="mb-4">
+                            <label for="onboardName" class="block text-sm font-medium text-gray-700">Name</label>
+                            <input type="text" id="onboardName" value="${user.displayName || ''}" placeholder="Your Full Name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border">
+                            </div>
 
-                            <div class="mb-6">
-                                <label for="onboardPhone" class="block text-sm font-medium text-gray-700">Phone Number (Required for OTP)</label>
-                                <input type="text" id="onboardPhone" placeholder="+63XXXXXXXXXX" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border">
-                            </div>
+                            <div class="mb-6">
+                                <label for="onboardPhone" class="block text-sm font-medium text-gray-700">Phone Number (Required for OTP)</label>
+                                <input type="text" id="onboardPhone" placeholder="+63XXXXXXXXXX" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border">
+                            </div>
 
-                            <button id="onboardSendOtp" class="w-full bg-pink-500 text-white py-2 rounded-lg font-semibold hover:bg-pink-600 transition">Send Verification Code</button>
+                            <button id="onboardSendOtp" class="w-full bg-pink-500 text-white py-2 rounded-lg font-semibold hover:bg-pink-600 transition">Send Verification Code</button>
 
-                <div id="onboardOtpSection" class="mt-6 p-4 border rounded-lg hidden">
-                            <label for="onboardOtpCode" class="block text-sm font-medium text-gray-700 mb-2">Enter 6-Digit OTP</label>
-                            <input type="text" id="onboardOtpCode" maxlength="6" placeholder="******" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border text-center text-lg font-mono">
-                            <button id="onboardVerifyOtp" class="w-full mt-4 bg-green-500 text-white py-2 rounded-lg font-semibold hover:bg-green-600 transition">Verify and Save Profile</button>
-                    </div>
+                <div id="onboardOtpSection" class="mt-6 p-4 border rounded-lg hidden">
+                            <label for="onboardOtpCode" class="block text-sm font-medium text-gray-700 mb-2">Enter 6-Digit OTP</label>
+                            <input type="text" id="onboardOtpCode" maxlength="6" placeholder="******" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 border text-center text-lg font-mono">
+                            <button id="onboardVerifyOtp" class="w-full mt-4 bg-green-500 text-white py-2 rounded-lg font-semibold hover:bg-green-600 transition">Verify and Save Profile</button>
+                    </div>
 
-                        <button id="logoutBtn" class="mt-4 w-full text-gray-500 hover:text-gray-700">Logout</button>
-                    </div>
-            `;
-                    attachOnboardingListeners(user); 
-            }
-        }
-    }
+                        <button id="logoutBtn" class="mt-4 w-full text-gray-500 hover:text-gray-700">Logout</button>
+                    </div>
+            `;
+                    attachOnboardingListeners(user); 
+            }
+        }
+    }
 
 window.renderApp = renderApp;
 /**
@@ -570,136 +1063,164 @@ window.renderApp = renderApp;
  */
 
 export async function fetchPublicContent() {
-    // This is a simplified version of fetchContent for public use
-    try {
-        const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
-        const gallerySnapshot = await getDocs(galleryQuery);
-        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // This is a simplified version of fetchContent for public use
+    try {
+        const galleryQuery = query(collection(db, GALLERY_COLLECTION), orderBy('timestamp', 'desc'));
+        const gallerySnapshot = await getDocs(galleryQuery);
+        state.gallery = gallerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        const designsQuery = query(collection(db, DESIGNS_COLLECTION), orderBy('timestamp', 'desc'));
-        const designsSnapshot = await getDocs(designsQuery);
-        state.designs = designsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-        console.error("Error fetching public content:", error);
-    }
+        const designsQuery = query(collection(db, DESIGNS_COLLECTION), orderBy('timestamp', 'desc'));
+        const designsSnapshot = await getDocs(designsQuery);
+        state.designs = designsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Error fetching public content:", error);
+    }
 }
 
 async function checkAndSetRole(user) {
     const isLoginPage = window.location.pathname.endsWith('/index.html') || window.location.pathname.endsWith('/'); 
     const isHomePage = window.location.pathname.endsWith('/homepage.html');
-    try {
-        if (!user) {
-            // CASE 1: NOT LOGGED IN
+    const isPublicPortfolioPage = window.location.pathname.endsWith('/design_portfolio.html');
 
-            if (isLoginPage) {
-                showContainer('auth-card'); 
-                hideContainer('app-content'); 
-                return; 
-            } else if (!isHomePage) {
-                window.location.href = 'index.html'; 
-                return;
-            }
-            return; 
-        }      
-
-        if (isLoginPage) {
-                // window.location.href = 'homepage.html'; 
-                // return; 
-        }
-
-        let clientData = null;
-        if (user.uid !== ADMIN_UID) {
-            const clientDoc = await getDoc(getClientDocRef(user.uid));
-            clientData = clientDoc.exists() ? clientDoc.data() : null;
-        }
-          
-        if (user.uid === ADMIN_UID) {
-            await fetchContent(); 
-        }
-
-        renderApp(user, clientData);
-
-    } catch (error) {
-        console.error("Error checking client data:", error);
-        showContainer('auth-card'); 
-        hideContainer('app-content');
-    } finally {
-        hideLoading(); 
+    // CRITICAL: If no user is logged in, but we are on a public page, stop here and let the public page logic handle it.
+    if (!user && (isHomePage || isPublicPortfolioPage)) {
+        console.log(`[Auth] Public page detected (${window.location.pathname}). Skipping restricted content check.`);
+        hideLoading();
+        return; 
     }
+
+    try {
+        if (!user) {
+            // CASE 1: NOT LOGGED IN (This block only runs if we are on a non-public/restricted page)
+            
+            // Note: isPublicPortfolioPage is already handled above and exits.
+            if (isLoginPage) {
+                showContainer('auth-card'); 
+                hideContainer('app-content'); 
+                return; 
+            } else { // If not logged in, and not on login page, redirect to login
+                window.location.href = 'index.html'; 
+                return;
+            }
+        }      
+
+        if (isLoginPage) {
+            // User is logged in, but on the login page, redirect them to a better default page (e.g., homepage.html or client dashboard)
+            // window.location.href = 'homepage.html'; 
+            // return; 
+        }
+
+        let clientData = null;
+        // Skip checking client data for anonymous users (they won't have it and it's unnecessary for the portfolio view)
+        if (user.uid !== ADMIN_UID && !user.isAnonymous) {
+            const clientDoc = await getDoc(getClientDocRef(user.uid));
+            clientData = clientDoc.exists() ? clientDoc.data() : null;
+        }
+          
+        if (user.uid === ADMIN_UID) {
+            await fetchContent(); 
+        }
+        
+        // If the user is logged in (client or admin), but on a public page, do NOT render the dashboard (i.e., do nothing here)
+        if (isPublicPortfolioPage) {
+            console.log(`[Auth] Logged-in user is viewing public page. Allowing continuation to public page logic.`);
+            // This allows the design_portfolio_logic.js script to finish running.
+        } else {
+            // Only render the restricted app content (dashboard/onboarding) if not on a public page
+            renderApp(user, clientData);
+        }
+
+    } catch (error) {
+        console.error("Error checking client data:", error);
+        showContainer('auth-card'); 
+        hideContainer('app-content');
+    } finally {
+        hideLoading(); 
+    }
 }
 
 function renderError(message) {
-    const appContent = document.getElementById('app-content');
-     if (appContent) {
-         appContent.innerHTML = `<div class="p-8 text-red-700 bg-red-100 rounded-lg max-w-lg mx-auto mt-8">${message}</div>`;
-        showContainer('app-content'); // Ensure error message is shown
-     }
+    const appContent = document.getElementById('app-content');
+     if (appContent) {
+         appContent.innerHTML = `<div class="p-8 text-red-700 bg-red-100 rounded-lg max-w-lg mx-auto mt-8">${message}</div>`;
+        showContainer('app-content'); // Ensure error message is shown
+     }
 }
 
 function attachGlobalFunctions() {
     // 1. Core Navigation
     window.setPage = setPage;
     window.setTab = setTab;
+    window.setAppointmentsTab = setAppointmentsTab;
 
     // 2. Content Actions
     window.saveDesign = saveDesign;
     window.deleteDesign = deleteDesign;
+    window.saveQRCode = saveQRCode;
+    window.deleteQRCode = deleteQRCode;
     window.saveGalleryItem = saveGalleryItem;
     window.deleteGalleryItem = deleteGalleryItem;
     window.toggleActivePromo = toggleActivePromo;
     window.toggleFeaturedDesign = toggleFeaturedDesign;
     window.editDesign = editDesign;
     window.updateDesignInline = updateDesignInline; // The function for inline saving
+    window.updateBookingStatus = updateBookingStatus;
+    window.deleteBooking = deleteBooking; // NEW: Add delete booking function
+    window.setBookingStatusFilter = setBookingStatusFilter;
+    window.createWalkInBooking = createWalkInBooking;
+    window.refreshCalendarEvents = refreshCalendarEvents;
+    window.refreshCalendarView = async (force = false) => {
+        await refreshCalendarEvents(force);
+        if (auth.currentUser) {
+            window.checkAndSetRole(auth.currentUser);
+        }
+    };
 
-    // 3. Other Core
-    window.logoutUser = logoutUser;
+    // 3. Other Core
+    window.logoutUser = logoutUser;
 }
 
 window.checkAndSetRole = checkAndSetRole; 
 attachGlobalFunctions();
 
 export function startAuthFlow() {
-    window.addEventListener('DOMContentLoaded', () => {
-        // 1. CRITICAL: Start the loading spinner immediately
-        renderLoading(); 
+    window.addEventListener('DOMContentLoaded', () => {
+        // 1. CRITICAL: Start the loading spinner immediately
+        renderLoading(); 
 
-        // Only run the auth listener if we are NOT on the public home page
-        const isHomePage = window.location.pathname.endsWith('/homepage.html');
+        // Now the auth listener is run on ALL pages, but the logic inside checkAndSetRole 
+        // will exit early for public pages.
+        onAuthStateChanged(auth, checkAndSetRole); 
+        
+        const loginButton = document.getElementById('google-login-btn');
 
-        if (!isHomePage) {
-            // This ensures checkAndSetRole runs only on index.html (login) or restricted pages.
-            onAuthStateChanged(auth, checkAndSetRole); 
-        }
-
-        const loginButton = document.getElementById('google-login-btn');
-
-        if (loginButton) {
-            loginButton.addEventListener('click', () => {
-                const provider = new GoogleAuthProvider();
-                signInWithPopup(auth, provider).catch(error => {
-                    console.error("Google Sign-In Error:", error.code, error.message);
-                    alert(`Login Failed: ${error.message}`);
-                });
-            });
-        }
-        onAuthStateChanged(auth, (user) => {
-                        const accountLink = document.getElementById('account-link');
-                        const loginBtn = document.getElementById('google-login-btn');
-            
-                        if (accountLink && loginBtn) {
-                            if (user) {
-                                // User is logged in: Show "My Account" link, Hide "Sign In" button
-                                accountLink.classList.remove('hidden');
-                                loginBtn.classList.add('hidden');
-                            } else {
-                                // User is NOT logged in: Hide "My Account" link, Show "Sign In" button
-                                accountLink.classList.add('hidden');
-                                loginBtn.classList.remove('hidden');
-                            }
-                        }
+        if (loginButton) {
+            loginButton.addEventListener('click', () => {
+                const provider = new GoogleAuthProvider();
+                signInWithPopup(auth, provider).catch(error => {
+                    console.error("Google Sign-In Error:", error.code, error.message);
+                    alert(`Login Failed: ${error.message}`);
+                });
+            });
+        }
+        onAuthStateChanged(auth, (user) => {
+                        const accountLink = document.getElementById('account-link');
+                        const loginBtn = document.getElementById('google-login-btn');
+            
+                        if (accountLink && loginBtn) {
+                            if (user) {
+                                // User is logged in: Show "My Account" link, Hide "Sign In" button
+                                accountLink.classList.remove('hidden');
+                                loginBtn.classList.add('hidden');
+                            } else {
+                                // User is NOT logged in: Hide "My Account" link, Show "Sign In" button
+                                accountLink.classList.add('hidden');
+                                loginBtn.classList.remove('hidden');
+                            }
+                        }
         });
 
     });
 }
 
-onAuthStateChanged(auth, checkAndSetRole); 
+onAuthStateChanged(auth, checkAndSetRole);
