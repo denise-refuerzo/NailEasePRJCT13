@@ -53,21 +53,34 @@ async function initFirebase() {
 export async function getClientAppointments(userId) {
     try {
         await initFirebase();
-        const q = query(
-            collection(db, BOOKINGS_COLLECTION),
-            where('userId', '==', userId),
-            orderBy('createdAt', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => {
-            const data = doc.data();
+        let snapshot;
+        try {
+            const q = query(
+                collection(db, BOOKINGS_COLLECTION),
+                where('userId', '==', userId),
+                orderBy('createdAt', 'desc')
+            );
+            snapshot = await getDocs(q);
+        } catch (orderByError) {
+            // Fallback without orderBy (no index)
+            const q = query(
+                collection(db, BOOKINGS_COLLECTION),
+                where('userId', '==', userId)
+            );
+            snapshot = await getDocs(q);
+        }
+        const appointments = snapshot.docs.map(docRef => {
+            const data = docRef.data();
             return {
-                id: doc.id,
+                id: docRef.id,
                 ...data,
-                createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
+                createdAt: data.createdAt?.toDate?.() || (data.createdAt ? new Date(data.createdAt) : new Date()),
                 appointmentDate: data.selectedDate ? new Date(`${data.selectedDate}T00:00:00`) : null
             };
         });
+        // Manual sort (desc)
+        appointments.sort((a,b) => (b.createdAt?.getTime?.()||0) - (a.createdAt?.getTime?.()||0));
+        return appointments;
     } catch (error) {
         console.error('Error fetching client appointments:', error);
         return [];

@@ -55,58 +55,66 @@ async function loadClientAppointments(userId) {
         const now = new Date();
         const appointmentsHtml = appointments.map(apt => {
             const aptDate = apt.appointmentDate || (apt.selectedDate ? new Date(`${apt.selectedDate}T00:00:00`) : null);
-            const isPast = aptDate && aptDate < now;
-            const isCompleted = apt.status === 'completed';
-            const canReview = isCompleted && isPast;
+            const isCompleted = (apt.status || '').toLowerCase() === 'completed';
+            const canReview = isCompleted; // show for completed only
             
             const statusBadge = {
                 pending: 'bg-amber-100 text-amber-700',
                 confirmed: 'bg-emerald-100 text-emerald-700',
                 completed: 'bg-sky-100 text-sky-700',
                 cancelled: 'bg-rose-100 text-rose-700'
-            }[apt.status] || 'bg-gray-100 text-gray-700';
+            }[(apt.status || '').toLowerCase()] || 'bg-gray-100 text-gray-700';
+            
+            const formattedDate = aptDate ? aptDate.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : (apt.selectedDate || 'N/A');
             
             return `
                 <div class="appointment-card bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm hover:shadow-md transition">
                     <div class="flex justify-between items-start mb-3">
                         <div>
-                            <h3 class="text-lg font-bold text-gray-800">${apt.design?.name || 'Nail Design'}</h3>
+                            <h3 class="text-lg font-bold text-gray-800">${apt.designName || apt.design?.name || 'Nail Design'}</h3>
                             <p class="text-sm text-gray-500">Booking ID: ${apt.bookingId || apt.id}</p>
                         </div>
-                        <span class="px-3 py-1 text-xs font-semibold rounded-full ${statusBadge}">
-                            ${apt.status || 'pending'}
-                        </span>
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full ${statusBadge} capitalize">${(apt.status || 'pending').toUpperCase()}</span>
                     </div>
                     <div class="grid grid-cols-2 gap-3 text-sm mb-3">
                         <div>
                             <span class="text-gray-500">Date:</span>
-                            <span class="font-semibold ml-2">${aptDate ? aptDate.toLocaleDateString() : apt.selectedDate || 'N/A'}</span>
+                            <span class="font-semibold ml-2">${formattedDate}</span>
                         </div>
                         <div>
                             <span class="text-gray-500">Time:</span>
                             <span class="font-semibold ml-2">${apt.selectedTime || 'N/A'}</span>
                         </div>
                         <div>
-                            <span class="text-gray-500">Price:</span>
-                            <span class="font-semibold ml-2">₱${apt.design?.price?.toFixed(2) || '0.00'}</span>
+                            <span class="text-gray-500">Total Amount:</span>
+                            <span class="font-semibold ml-2">₱${Number(apt.totalAmount || apt.design?.price || 0).toFixed(2)}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Amount Paid:</span>
+                            <span class="font-semibold ml-2">₱${Number(apt.amountPaid || 0).toFixed(2)}</span>
                         </div>
                     </div>
-                    ${canReview ? `
-                        <button class="leave-review-btn w-full bg-pink-500 hover:bg-pink-600 text-white py-2 rounded-lg font-semibold transition mt-2" 
-                                data-appointment-id="${apt.id}">
-                            Leave Review
-                        </button>
-                    ` : ''}
+                    <div class="flex gap-2 mt-3">
+                        <button class="view-details-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold transition" data-appointment-id="${apt.id}">View Details</button>
+                        ${canReview ? `<button class="leave-review-btn flex-1 bg-pink-500 hover:bg-pink-600 text-white py-2 rounded-lg font-semibold transition" data-appointment-id="${apt.id}">Leave Review</button>` : ''}
+                    </div>
                 </div>
             `;
         }).join('');
         
         appointmentsGrid.innerHTML = appointmentsHtml;
         
-        // Attach review button listeners
+        // Details + Review listeners
+        document.querySelectorAll('.view-details-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const appointmentId = e.currentTarget.dataset.appointmentId;
+                const apt = appointments.find(x => x.id === appointmentId);
+                if (apt) openAppointmentDetailsModal(apt);
+            });
+        });
         document.querySelectorAll('.leave-review-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const appointmentId = e.target.dataset.appointmentId;
+                const appointmentId = e.currentTarget.dataset.appointmentId;
                 openReviewModal(appointmentId);
             });
         });
@@ -295,6 +303,38 @@ function attachReviewModalListeners(user, clientData) {
     // Close buttons
     document.getElementById('closeReviewModal').addEventListener('click', closeReviewModal);
     document.getElementById('cancelReviewBtn').addEventListener('click', closeReviewModal);
+}
+
+// Minimal details modal (if not present)
+function openAppointmentDetailsModal(appointment) {
+    let modal = document.getElementById('appointmentDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'appointmentDetailsModal';
+        modal.className = 'fixed inset-0 bg-black/70 z-50 hidden items-center justify-center p-4';
+        modal.innerHTML = `<div class="bg-white rounded-2xl p-6 max-w-xl w-full relative"><button id="closeAppointmentDetails" class="absolute top-3 right-4 text-2xl">×</button><div id="appointmentDetailsContent"></div></div>`;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (e)=>{ if (e.target === modal) { modal.classList.add('hidden'); document.body.style.overflow=''; }});
+        document.getElementById('closeAppointmentDetails').addEventListener('click', ()=>{ modal.classList.add('hidden'); document.body.style.overflow=''; });
+    }
+    const total = Number(appointment.totalAmount || appointment.design?.price || 0);
+    const paid = Number(appointment.amountPaid || 0);
+    const remaining = total - paid;
+    const dateStr = appointment.appointmentDate ? appointment.appointmentDate.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : (appointment.selectedDate || 'N/A');
+    const html = `
+        <h3 class="text-xl font-bold mb-2">${appointment.designName || appointment.design?.name || 'Nail Design'}</h3>
+        <p class="text-sm text-gray-600 mb-4">Booking ID: ${appointment.bookingId || appointment.id}</p>
+        <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+            <div><span class="text-gray-500">Date:</span> <span class="font-semibold ml-1">${dateStr}</span></div>
+            <div><span class="text-gray-500">Time:</span> <span class="font-semibold ml-1">${appointment.selectedTime || 'N/A'}</span></div>
+            <div><span class="text-gray-500">Total:</span> <span class="font-semibold ml-1">₱${total.toFixed(2)}</span></div>
+            <div><span class="text-gray-500">Paid:</span> <span class="font-semibold ml-1">₱${paid.toFixed(2)}</span></div>
+        </div>
+        <div class="text-sm"><span class="text-gray-500">Remaining:</span> <span class="font-semibold ml-1 ${remaining>0?'text-orange-600':'text-green-600'}">₱${remaining.toFixed(2)}</span></div>
+    `;
+    document.getElementById('appointmentDetailsContent').innerHTML = html;
+    modal.classList.remove('hidden');
+    document.body.style.overflow='hidden';
 }
 
 /**
