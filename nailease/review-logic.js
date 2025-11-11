@@ -131,7 +131,7 @@ export async function submitReview(reviewData) {
 }
 
 /**
- * Get user's reviews
+ * Get user's reviews (FIXED to include doc ID and format date for client-side display)
  */
 export async function getUserReviews(userId) {
     try {
@@ -142,12 +142,15 @@ export async function getUserReviews(userId) {
             orderBy('createdAt', 'desc')
         );
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => {
-            const data = doc.data();
+        
+        return snapshot.docs.map(docRef => {
+            const data = docRef.data();
             return {
-                id: doc.id,
+                id: docRef.id, // Include the document ID for editing/deleting
+                userId: data.userId, // Include the userId for client-side ownership check
                 ...data,
-                createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt)
+                // FIX: Convert Firestore Timestamp object to milliseconds for client_dashboard_layout.js
+                createdAt: data.createdAt?.toDate?.()?.getTime() || data.createdAt 
             };
         });
     } catch (error) {
@@ -186,7 +189,7 @@ export async function getAllReviews(starFilter = null) {
 }
 
 /**
- * Delete a review (admin only)
+ * Delete a review (Used by the client to delete their own review)
  */
 export async function deleteReview(reviewId) {
     try {
@@ -194,10 +197,10 @@ export async function deleteReview(reviewId) {
         const reviewRef = doc(db, REVIEWS_COLLECTION, reviewId);
         
         // Get review data to delete images
-        const reviewQuery = query(collection(db, REVIEWS_COLLECTION), where('__name__', '==', reviewId));
-        const reviewDoc = await getDocs(reviewQuery);
-        if (!reviewDoc.empty) {
-            const reviewData = reviewDoc.docs[0].data();
+        const reviewDocSnapshot = await getDoc(reviewRef);
+        
+        if (reviewDocSnapshot.exists()) {
+            const reviewData = reviewDocSnapshot.data();
             // Delete images from Storage
             if (reviewData.imageUrls && Array.isArray(reviewData.imageUrls)) {
                 for (const imageUrl of reviewData.imageUrls) {
@@ -206,12 +209,16 @@ export async function deleteReview(reviewId) {
                         const imageRef = ref(storage, imageUrl);
                         await deleteObject(imageRef);
                     } catch (err) {
-                        console.warn('Could not delete image:', err);
+                        // Log warning but continue with document deletion
+                        console.warn('Could not delete image for review:', err);
                     }
                 }
             }
+        } else {
+            console.warn(`Review document ID ${reviewId} not found, proceeding with deleteDoc.`);
         }
         
+        // Delete the review document
         await deleteDoc(reviewRef);
         return { success: true };
     } catch (error) {

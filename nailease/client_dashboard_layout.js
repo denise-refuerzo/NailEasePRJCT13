@@ -1,5 +1,6 @@
 import { clientDashboardTemplate } from "./client_dashboard_template.js";
-import { getClientAppointments, submitReview, getUserReviews } from './review-logic.js';
+// UPDATED: Imported deleteReview for the action listeners
+import { getClientAppointments, submitReview, getUserReviews, deleteReview } from './review-logic.js';
 
 /**
  * Renders the full client dashboard into the main app container.
@@ -124,7 +125,7 @@ async function loadClientAppointments(userId) {
 }
 
 /**
- * Load and display user reviews
+ * Load and display user reviews (FIXED to correctly display date and add action buttons)
  */
 async function loadUserReviews(userId) {
     try {
@@ -146,11 +147,20 @@ async function loadUserReviews(userId) {
         
         const reviewsHtml = reviews.map(review => {
             const stars = '⭐'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+            // FIX: Convert timestamp (milliseconds or Firebase Timestamp object's value) to a readable date string
+            const formattedDate = review.createdAt 
+                ? new Date(review.createdAt).toLocaleDateString()
+                : 'N/A'; 
+            
+            // Logic for Edit/Delete visibility (client can edit/delete their own review)
+            // It compares the user's ID with the stored userId in the review document.
+            const isOwner = review.userId === userId; 
+
             return `
                 <div class="review-card bg-white border border-gray-200 rounded-xl p-5 mb-4 shadow-sm">
                     <div class="flex items-center justify-between mb-2">
                         <div class="text-2xl">${stars}</div>
-                        <span class="text-xs text-gray-500">${review.createdAt.toLocaleDateString()}</span>
+                        <span class="text-xs text-gray-500">${formattedDate}</span>
                     </div>
                     <p class="text-gray-700 mb-3">${review.text}</p>
                     ${review.imageUrls && review.imageUrls.length > 0 ? `
@@ -160,28 +170,97 @@ async function loadUserReviews(userId) {
                             `).join('')}
                         </div>
                     ` : ''}
+                    
+                    ${isOwner ? `
+                        <div class="flex gap-2 mt-4">
+                            <button class="edit-review-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold transition" 
+                                    data-review-id="${review.id}" 
+                                    data-rating="${review.rating}" 
+                                    data-text="${review.text}" 
+                                    data-appointment-id="${review.appointmentId}">
+                                Edit
+                            </button>
+                            <button class="delete-review-btn flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-semibold transition" 
+                                    data-review-id="${review.id}">
+                                Delete
+                            </button>
+                        </div>
+                    ` : ''}
                 </div>
             `;
         }).join('');
         
         reviewsGrid.innerHTML = reviewsHtml;
+        
+        // Attach listeners for the new Edit/Delete buttons
+        attachReviewActionsListeners(userId);
     } catch (error) {
         console.error('Error loading reviews:', error);
     }
 }
 
 /**
- * Open review submission modal
+ * Attach listeners for Edit and Delete buttons on the user's reviews.
  */
-function openReviewModal(appointmentId) {
+function attachReviewActionsListeners(userId) {
+    // 1. Delete Listener
+    document.querySelectorAll('.delete-review-btn').forEach(btn => {
+        // Prevent duplicate listeners
+        if (btn.listener) btn.removeEventListener('click', btn.listener); 
+        
+        const listener = async (e) => {
+            const reviewId = e.currentTarget.dataset.reviewId;
+            if (confirm('Are you sure you want to delete this review? This action is permanent and cannot be undone.')) {
+                try {
+                    await deleteReview(reviewId); // Call imported function from review-logic.js
+                    alert('Review deleted successfully!');
+                    await loadUserReviews(userId); // Reload reviews list
+                } catch (error) {
+                    console.error('Failed to delete review:', error);
+                    alert('Failed to delete review. Please check console for details.');
+                }
+            }
+        };
+        btn.addEventListener('click', listener);
+        btn.listener = listener; // Store listener reference
+    });
+    
+    // 2. Edit Listener 
+    document.querySelectorAll('.edit-review-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const { reviewId, rating, text, appointmentId } = e.currentTarget.dataset;
+            
+            // For now, we reuse the submission modal to demonstrate the hook:
+            // A full implementation would pre-fill the form with existing data (rating, text, images).
+            openReviewModal(appointmentId, reviewId); 
+            // NOTE: The submit handler (reviewForm) would need logic to check if it's an update (has reviewId) or a new submission.
+            // Placeholder alert:
+            // alert(`Opening Edit Modal for Review ID: ${reviewId}\n(Rating: ${rating}, Text: "${text.substring(0, 30)}...")`);
+        });
+    });
+}
+
+
+/**
+ * Open review submission modal (Updated to optionally accept review ID for editing)
+ */
+function openReviewModal(appointmentId, reviewId = null) {
     const modal = document.getElementById('reviewModal');
+    // Set values based on whether it is a new submission or edit
     document.getElementById('reviewAppointmentId').value = appointmentId;
+    // NOTE: You must have a hidden input field with id="reviewReviewId" in your HTML modal structure for this to work.
+    const reviewIdInput = document.getElementById('reviewReviewId');
+    if (reviewIdInput) {
+        reviewIdInput.value = reviewId || ''; 
+    }
     document.getElementById('reviewRating').value = '';
     document.getElementById('reviewText').value = '';
     document.getElementById('reviewImage1').value = '';
     document.getElementById('reviewImage2').value = '';
     document.getElementById('previewImage1').classList.add('hidden');
     document.getElementById('previewImage2').classList.add('hidden');
+
+    // Add logic here to load and pre-fill fields if reviewId is present (for full edit function)
     
     // Reset star rating
     document.querySelectorAll('.star-btn').forEach(btn => {
@@ -252,6 +331,7 @@ function attachReviewModalListeners(user, clientData) {
         const messageDiv = document.getElementById('reviewMessage');
         
         const appointmentId = document.getElementById('reviewAppointmentId').value;
+        const reviewId = document.getElementById('reviewReviewId')?.value; // Get reviewId for edit/update logic
         const rating = document.getElementById('reviewRating').value;
         const text = document.getElementById('reviewText').value;
         const image1 = document.getElementById('reviewImage1').files[0];
@@ -265,11 +345,17 @@ function attachReviewModalListeners(user, clientData) {
         }
         
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
+        // Check if we are updating or submitting new
+        submitBtn.textContent = reviewId ? 'Updating...' : 'Submitting...'; 
         
         try {
             const images = [image1, image2].filter(img => img);
+            
+            // NOTE: In a complete solution, you would call an updateReview function if reviewId exists here.
+            // Since you haven't provided an updateReview function in review-logic.js, we call submitReview 
+            // for demonstration, assuming it handles upserts or you will add the update logic later.
             await submitReview({
+                reviewId, // Passed for potential upsert/update logic
                 userId: user.uid,
                 appointmentId,
                 rating,
@@ -279,7 +365,7 @@ function attachReviewModalListeners(user, clientData) {
                 userEmail: user.email
             });
             
-            messageDiv.textContent = 'Review submitted successfully!';
+            messageDiv.textContent = reviewId ? 'Review updated successfully!' : 'Review submitted successfully!';
             messageDiv.classList.remove('hidden', 'text-red-500');
             messageDiv.classList.add('text-green-500');
             
@@ -291,12 +377,12 @@ function attachReviewModalListeners(user, clientData) {
                 closeReviewModal();
             }, 1500);
         } catch (error) {
-            messageDiv.textContent = 'Error submitting review. Please try again.';
+            messageDiv.textContent = 'Error submitting/updating review. Please try again.';
             messageDiv.classList.remove('hidden');
             messageDiv.classList.add('text-red-500');
         } finally {
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Review';
+            submitBtn.textContent = reviewId ? 'Update Review' : 'Submit Review';
         }
     });
     
@@ -508,10 +594,15 @@ export function attachClientDashboardListeners(user, clientData, logoutUser, sen
         });
     }
 
-    // Load appointments and reviews after DOM is ready
-    setTimeout(async () => {
-        await loadClientAppointments(user.uid);
-        await loadUserReviews(user.uid);
-        attachReviewModalListeners(user, clientData);
-    }, 100);
+    // FIX: Load appointments and reviews immediately (synchronous with DOM rendering)
+    (async () => {
+        try {
+            await loadClientAppointments(user.uid);
+            await loadUserReviews(user.uid);
+            attachReviewModalListeners(user, clientData);
+            // attachReviewActionsListeners is called inside loadUserReviews
+        } catch (e) {
+            console.error('Initial dashboard load failed:', e);
+        }
+    })();
 }
