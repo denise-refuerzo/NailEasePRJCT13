@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Firebase Google Sign-In</title>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -19,6 +20,19 @@
             width: 100%;
             max-width: 1000px;
             padding: 0 20px;
+        }
+        body.app-mode {
+            display: block;
+            min-height: auto;
+            background-color: #f7f9fb;
+        }
+        .center-container.app-mode {
+            width: 100%;
+            max-width: none;
+            padding: 0;
+        }
+        .center-container.app-mode #app-content {
+            display: block;
         }
     </style>
 </head>
@@ -51,6 +65,30 @@
     <script type="module">
         import { startAuthFlow } from './auth-logic.js';
         startAuthFlow();
+    </script>
+    <script>
+        (function () {
+            const center = document.querySelector('.center-container');
+            const authCard = document.getElementById('auth-card');
+            const appContent = document.getElementById('app-content');
+
+            if (!center || !appContent) return;
+
+            const enableAppLayout = () => {
+                document.body.classList.add('app-mode');
+                center.classList.add('app-mode');
+                if (authCard) authCard.classList.add('hidden');
+            };
+
+            const observer = new MutationObserver(() => {
+                if (appContent.innerHTML.trim().length > 0) {
+                    enableAppLayout();
+                    observer.disconnect();
+                }
+            });
+
+            observer.observe(appContent, { childList: true, subtree: false });
+        })();
     </script>
 </body>
 </html>

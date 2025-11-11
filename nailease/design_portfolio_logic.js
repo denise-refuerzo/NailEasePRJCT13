@@ -350,7 +350,7 @@ const renderPortfolioPage = () => {
     let mainContentHtml = '';
     
     // NEW QUOTE FOR THE PAGE
-    const portfolioQuote = "✨ Your Hands are the canvas. Let us create the masterpiece. ✨";
+    const portfolioQuote = "✨ Defining elegance from the tips of your fingers. ✨";
 
     if (isLoading) {
 // ... (Loading state remains the same)
@@ -386,11 +386,23 @@ const renderPortfolioPage = () => {
     }
 
 
-    const pageHtml = `
-        <div class="min-h-screen bg-pink-50/50">
-         <header class="sticky top-0 bg-white shadow-lg z-50">
-                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                    <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+    const pageHtml = `
+        <style>
+            #public-root {
+                width: 100vw;
+                max-width: 100vw;
+                margin-left: calc(50% - 50vw);
+                margin-right: calc(50% - 50vw);
+            }
+            html, body { margin: 0; padding: 0; overflow-x: hidden; }
+        </style>
+        <div id="public-root" class="min-h-screen bg-pink-50/50">
+            <header class="sticky top-0 bg-white shadow-lg z-50">
+                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0">
+                    <a href="home.html" class="shadow-sm hover:shadow-md transition">
+                        <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
+                    </a>
+                    
                     <nav class="flex space-x-4 items-center">
                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
                         <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
@@ -398,13 +410,13 @@ const renderPortfolioPage = () => {
                         <a href="feedback.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Feedback</a>
                         <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
                         <button id="accountLinkBtn" class="flex items-center text-pink-600 hover:text-pink-700 transition duration-150 p-2 rounded-full hover:bg-pink-50">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        </button>
-                    </nav>
-                </div>
-            </header>
-            
-            <main class="max-w-7xl mx-auto p-4 md:p-8">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                    </nav>
+                </div>
+            </header>
+            
+            <main class="max-w-7xl mx-auto p-4 md:p-8">
                 ${mainContentHtml}
             </main>
 

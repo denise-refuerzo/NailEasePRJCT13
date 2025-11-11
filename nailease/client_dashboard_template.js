@@ -23,9 +23,39 @@ export const clientDashboardTemplate = `
                 scrollbar-color: #ec4899 #f1f1f1;
             }
         </style>
+        <style>
+            html, body { margin: 0; padding: 0; }
+            body { overflow-x: hidden; }
+            /* Force full-width containers to eliminate left gutter */
+            .client-header-inner,
+            .account-container {
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+            /* Target likely parents that wrap this template */
+            #app-content, #app, main, .page-wrapper, .container, .page {
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+            /* Ensure root breaks out of any centered parent and spans viewport */
+            #client-dashboard-root {
+                width: 100vw;
+                max-width: 100vw;
+                margin-left: calc(50% - 50vw) !important;
+                margin-right: calc(50% - 50vw) !important;
+            }
+        </style>
+
+        <div id="client-dashboard-root" class="min-h-screen bg-pink-50/50 overflow-x-hidden w-full">
         <header class="sticky top-0 bg-white shadow-lg z-50">
-            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0 client-header-inner">
+                <a href="home.html" class="shadow-sm hover:shadow-md transition">
+                    <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
+                </a>
                     <nav class="flex space-x-4 items-center">
                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
                         <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
@@ -37,7 +67,7 @@ export const clientDashboardTemplate = `
             </div>
         </header>
     
-    <div class="account-container max-w-7xl mx-auto p-4 md:p-8">
+    <div class="account-container w-full mx-0 p-4 md:p-8">
         
         <h1 class="font-['Playfair_Display'] text-4xl font-extrabold text-pink-600 text-center mb-10" style="text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.8);">
             Your Client Hub

@@ -46,23 +46,43 @@ async function renderFeedbackPage() {
         console.log('Current photos to display:', currentPhotos.length);
         console.log('Current photos data:', currentPhotos);
         
+        const sharedLayoutStyles = `
+            <style>
+                #public-root {
+                    width: 100vw;
+                    max-width: 100vw;
+                    margin-left: calc(50% - 50vw);
+                    margin-right: calc(50% - 50vw);
+                }
+                html, body { margin: 0; padding: 0; overflow-x: hidden; }
+                .custom-scroll-style::-webkit-scrollbar { display: none; }
+                .custom-scroll-style { -ms-overflow-style: none; scrollbar-width: none; }
+                .text-shadow-pink { text-shadow: 1px 1px 0px rgba(255, 192, 203, 0.5); }
+                .shadow-inner-pink { box-shadow: inset 0 0 5px rgba(255, 192, 203, 0.4); }
+            </style>
+        `;
+        
         container.innerHTML = `
-            <div class="min-h-screen bg-pink-50/50">
-                <header class="sticky top-0 bg-white shadow-lg z-50">
-                    <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                        <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
-                        <nav class="flex space-x-4 items-center">
-                            <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
-                            <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
-                            <a href="book.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Book</a>
-                            <a href="feedback.html" class="text-pink-600 font-medium">Feedback</a>
-                            <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
-                            <button id="accountLinkBtn" class="flex items-center text-pink-600 hover:text-pink-700 transition duration-150 p-2 rounded-full hover:bg-pink-50">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            </button>
-                        </nav>
-                    </div>
-                </header>
+            ${sharedLayoutStyles}
+            <div id="public-root" class="min-h-screen bg-pink-50/50">
+            <header class="sticky top-0 bg-white shadow-lg z-50">
+                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0">
+                    <a href="home.html" class="shadow-sm hover:shadow-md transition">
+                        <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
+                    </a>
+                    
+                    <nav class="flex space-x-4 items-center">
+                        <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
+                        <a href="design_portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Design Portfolio</a>
+                        <a href="book.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Book</a>
+                        <a href="feedback.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Feedback</a>
+                        <a href="about.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">About us</a>
+                        <button id="accountLinkBtn" class="flex items-center text-pink-600 hover:text-pink-700 transition duration-150 p-2 rounded-full hover:bg-pink-50">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                    </nav>
+                </div>
+            </header>
                 
                 <main class="max-w-7xl mx-auto p-4 md:p-8">
                     <h1 class="text-4xl font-extrabold text-pink-600 text-center mb-8">Client Feedback</h1>
@@ -184,9 +204,8 @@ async function renderFeedbackPage() {
                         </div>
                     </div>
                 </main>
-                
                 <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
-                    &copy; 2024 DCAC. All rights reserved.
+                    &copy; 2024 D'UR LASHNAILS BY DES. All rights reserved.
                 </footer>
                 
                 <!-- Photo Modal/Lightbox -->

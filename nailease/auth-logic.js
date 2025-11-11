@@ -139,15 +139,35 @@ async function verifyOTPAndSave(uid, name, phone, code) {
 }
 
 export async function updateClientName(uid, newName) {
-    try {
-        await setDoc(getClientDocRef(uid), { name: newName, lastUpdated: serverTimestamp() }, { merge: true });
-        alert("Name updated successfully!");
-        // Force UI refresh to show new name on dashboard
-        setTimeout(() => checkAndSetRole(auth.currentUser), 100); 
-    } catch (error) {
-        console.error("Error updating name:", error);
-        alert("Failed to save name. See console.");
-    }
+    try {
+        await setDoc(getClientDocRef(uid), { name: newName, lastUpdated: serverTimestamp() }, { merge: true });
+        
+        // --- SUCCESS ALERT (SweetAlert2) ---
+        Swal.fire({
+            title: "Success!",
+            text: "Name updated successfully!",
+            icon: "success",
+            confirmButtonText: "OK", 
+            confirmButtonColor: '#EC4899' // Pink color
+        });
+        // ------------------------------------
+
+        // Force UI refresh to show new name on dashboard
+        setTimeout(() => checkAndSetRole(auth.currentUser), 100);
+        
+    } catch (error) {
+        console.error("Error updating name:", error);
+        
+        // --- ERROR ALERT (SweetAlert2) ---
+        Swal.fire({
+            title: "Update Failed",
+            text: "Failed to save name. Please try again or contact support if the issue persists.", // More user-friendly error text
+            icon: "error",
+            confirmButtonText: "Close",
+            confirmButtonColor: '#EF4444' // Red color
+        });
+        // ------------------------------------
+    }
 }
 
 // Clears the session and redirects to the login view.
