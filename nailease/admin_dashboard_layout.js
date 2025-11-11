@@ -39,104 +39,6 @@ const APPOINTMENT_STATUS_META = {
     // }
 };
 
-// Blocked days functionality for walk-in form
-const APP_ID_BLOCKED = 'nailease25-iapt';
-const BLOCKED_DAYS_COLLECTION = `artifacts/${APP_ID_BLOCKED}/blockedDays`;
-let blockedDaysCacheAdmin = new Set();
-
-/**
- * Check if a date is blocked (for admin walk-in form)
- */
-async function isDayBlockedAdmin(dateString) {
-    if (!dateString) return false;
-    
-    // Check cache first
-    if (blockedDaysCacheAdmin.has(dateString)) {
-        return true;
-    }
-    
-    try {
-        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
-            authDomain: "nailease25.firebaseapp.com",
-            projectId: "nailease25",
-            storageBucket: "nailease25.firebasestorage.app",
-            messagingSenderId: "706150189317",
-            appId: "1:706150189317:web:82986edbd97f545282cf6c",
-            measurementId: "G-RE42B3FVRJ"
-        };
-        
-        let app;
-        try {
-            app = getApp();
-        } catch (e) {
-            app = initializeApp(firebaseConfig);
-        }
-        
-        const db = getFirestore(app);
-        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
-        const blockedDaySnap = await getDoc(blockedDayRef);
-        
-        if (blockedDaySnap.exists()) {
-            const data = blockedDaySnap.data();
-            if (data.blocked === true) {
-                blockedDaysCacheAdmin.add(dateString);
-                return true;
-            }
-        }
-    } catch (error) {
-        console.error('Error checking blocked day:', error);
-    }
-    
-    return false;
-}
-
-/**
- * Initialize blocked days cache for admin
- */
-async function initializeBlockedDaysCacheAdmin() {
-    try {
-        const { getFirestore, collection, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
-            authDomain: "nailease25.firebaseapp.com",
-            projectId: "nailease25",
-            storageBucket: "nailease25.firebasestorage.app",
-            messagingSenderId: "706150189317",
-            appId: "1:706150189317:web:82986edbd97f545282cf6c",
-            measurementId: "G-RE42B3FVRJ"
-        };
-        
-        let app;
-        try {
-            app = getApp();
-        } catch (e) {
-            app = initializeApp(firebaseConfig);
-        }
-        
-        const db = getFirestore(app);
-        const blockedDaysRef = collection(db, BLOCKED_DAYS_COLLECTION);
-        const snapshot = await getDocs(blockedDaysRef);
-        
-        blockedDaysCacheAdmin.clear();
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.blocked === true) {
-                blockedDaysCacheAdmin.add(doc.id);
-            } else if (data.date && data.blocked === true) {
-                blockedDaysCacheAdmin.add(data.date);
-            }
-        });
-    } catch (error) {
-        console.error('Error initializing blocked days cache:', error);
-    }
-}
-
 const formatDate = (value) => {
     if (!value) return 'No date set';
     const date = value instanceof Date ? value : new Date(value);
@@ -324,45 +226,6 @@ window.createHourlyTimeInput = function(id, value = '', selectedDate = '') {
 };
 
 // Function to update time options based on selected date - uses weekday/weekend logic
-window.updateTimeOptions = async function(selectedDate) {
-    const timeSelect = document.getElementById('selectedTime');
-    const dateInput = document.getElementById('selectedDate');
-    if (!timeSelect || !dateInput) return;
-    
-    // Check if date is blocked
-    const dayIsBlocked = await isDayBlockedAdmin(selectedDate);
-    
-    if (dayIsBlocked) {
-        // Clear time options and show blocked message
-        timeSelect.innerHTML = '<option value="">Day is Blocked - No Time Slots Available</option>';
-        timeSelect.disabled = true;
-        timeSelect.classList.add('bg-red-50', 'border-red-300');
-        
-        // Show error message
-        let errorMsg = document.getElementById('blockedDateError');
-        if (!errorMsg) {
-            errorMsg = document.createElement('div');
-            errorMsg.id = 'blockedDateError';
-            errorMsg.className = 'mt-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm';
-            dateInput.parentElement.appendChild(errorMsg);
-        }
-        errorMsg.textContent = '⚠️ This day is blocked. Please select a different date.';
-        errorMsg.style.display = 'block';
-        
-        // Highlight the date input
-        dateInput.classList.add('border-red-500', 'bg-red-50');
-        
-        return;
-    } else {
-        // Remove error message and styling if date is not blocked
-        const errorMsg = document.getElementById('blockedDateError');
-        if (errorMsg) {
-            errorMsg.style.display = 'none';
-        }
-        dateInput.classList.remove('border-red-500', 'bg-red-50');
-        timeSelect.classList.remove('bg-red-50', 'border-red-300');
-        timeSelect.disabled = false;
-    }
 window.updateTimeOptions = function(selectedDate) {
     const timeSelect = document.getElementById('selectedTime');
     if (!timeSelect) return;
@@ -1141,7 +1004,6 @@ const walkInFormHtml = `
             <label for="selectedDate" class="block text-sm font-medium text-gray-700">Appointment Date</label>
             <input type="date" id="selectedDate" name="selectedDate" required
                 class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white"
-                onchange="window.updateTimeOptions(this.value).catch(err => console.error('Error updating time options:', err))">
                 onchange="window.updateTimeOptions(this.value)">
         </div>
 
@@ -1265,20 +1127,8 @@ const walkInFormHtml = `
         try {
             // Dynamically import and render Firestore calendar view
             if (typeof renderAppointmentCalendar === 'function') {
-                // Note: This is handled asynchronously in the initialization code below
-                // For now, show loading state
                 const currentMonth = window.currentCalendarMonth || new Date();
                 firestoreCalendarHtml = renderAppointmentCalendar(bookings, currentMonth);
-            } else {
-                // Fallback: Load the module
-                firestoreCalendarHtml = `
-                    <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
-                        <div class="text-center py-8">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-                            <p class="text-gray-600">Loading calendar view...</p>
-                        </div>
-                    </div>
-                `;
             } else {
                 // Fallback: Load the module
                 firestoreCalendarHtml = `
@@ -1489,18 +1339,11 @@ const walkInFormHtml = `
         };
         
         // Dynamically import and initialize calendar view
-        import('./appointment-calendar-view.js').then(async ({ renderAppointmentCalendar, attachCalendarListeners }) => {
         import('./appointment-calendar-view.js').then(({ renderAppointmentCalendar, attachCalendarListeners }) => {
             const currentMonth = window.currentCalendarMonth || new Date();
             const calendarContainer = document.getElementById('firestore-calendar-container');
             
             if (calendarContainer) {
-                // Initial render (async)
-                const calendarHtml = await renderAppointmentCalendar(bookings, currentMonth);
-                calendarContainer.innerHTML = calendarHtml;
-                
-                // Attach navigation listeners
-                const updateCalendar = async (newMonth) => {
                 // Initial render
                 const calendarHtml = renderAppointmentCalendar(bookings, currentMonth);
                 calendarContainer.innerHTML = calendarHtml;
@@ -1512,23 +1355,11 @@ const walkInFormHtml = `
                     if (state && state.bookings) {
                         window.currentAppointments = state.bookings;
                     }
-                    const updatedHtml = await renderAppointmentCalendar(window.currentAppointments || bookings, newMonth);
                     const updatedHtml = renderAppointmentCalendar(window.currentAppointments || bookings, newMonth);
                     calendarContainer.innerHTML = updatedHtml;
                     attachCalendarListeners(updateCalendar);
                 };
                 attachCalendarListeners(updateCalendar);
-                
-                // Set up global refresh function for block/unblock
-                window.refreshCalendarView = async () => {
-                    const currentMonth = window.currentCalendarMonth || new Date();
-                    if (state && state.bookings) {
-                        window.currentAppointments = state.bookings;
-                    }
-                    const updatedHtml = await renderAppointmentCalendar(window.currentAppointments || bookings, currentMonth);
-                    calendarContainer.innerHTML = updatedHtml;
-                    attachCalendarListeners(updateCalendar);
-                };
             }
         }).catch(error => {
             console.error('Error loading calendar view:', error);
@@ -1536,9 +1367,6 @@ const walkInFormHtml = `
         
         // Setup real-time listeners for instant updates
         import('./realtime-appointments.js').then(({ setupRealtimeAppointments }) => {
-            const refreshCalendarView = async () => {
-                if (currentTab === 'calendar') {
-                    import('./appointment-calendar-view.js').then(async ({ renderAppointmentCalendar, attachCalendarListeners }) => {
             const refreshCalendarView = () => {
                 if (currentTab === 'calendar') {
                     import('./appointment-calendar-view.js').then(({ renderAppointmentCalendar, attachCalendarListeners }) => {
@@ -1547,11 +1375,6 @@ const walkInFormHtml = `
                         if (calendarContainer) {
                             // Get updated appointments
                             const updatedBookings = window.currentAppointments || bookings;
-                            const updatedHtml = await renderAppointmentCalendar(updatedBookings, currentMonth);
-                            calendarContainer.innerHTML = updatedHtml;
-                            
-                            // Re-attach listeners
-                            const updateCalendar = async (newMonth) => {
                             const updatedHtml = renderAppointmentCalendar(updatedBookings, currentMonth);
                             calendarContainer.innerHTML = updatedHtml;
                             
@@ -1561,7 +1384,6 @@ const walkInFormHtml = `
                                 if (state && state.bookings) {
                                     window.currentAppointments = state.bookings;
                                 }
-                                const newHtml = await renderAppointmentCalendar(window.currentAppointments || bookings, newMonth);
                                 const newHtml = renderAppointmentCalendar(window.currentAppointments || bookings, newMonth);
                                 calendarContainer.innerHTML = newHtml;
                                 attachCalendarListeners(updateCalendar);
@@ -1638,8 +1460,6 @@ const walkInFormHtml = `
         if (typeof window.initializeTimeInputs === 'function') {
             window.initializeTimeInputs();
         }
-        // Note: Date initialization is now handled in attachAppointmentsListeners
-        // to include blocked days cache initialization
         // Set initial date to today and update time options
         const dateInput = document.getElementById('selectedDate');
         if (dateInput) {
@@ -1997,33 +1817,10 @@ export function attachAppointmentsListeners() {
 
     const walkInForm = document.getElementById('walkInForm');
     if (walkInForm) {
-        walkInForm.addEventListener('submit', async event => {
+        walkInForm.addEventListener('submit', event => {
             event.preventDefault();
             const formData = new FormData(walkInForm);
             const payload = Object.fromEntries(formData.entries());
-            
-            // Check if date is blocked
-            const dayIsBlocked = await isDayBlockedAdmin(payload.selectedDate);
-            if (dayIsBlocked) {
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Date Blocked',
-                        text: 'This day is blocked and unavailable for booking. Please select a different date.',
-                        confirmButtonText: 'OK',
-                        confirmButtonColor: '#ec4899'
-                    });
-                } else {
-                    alert('This day is blocked and unavailable for booking. Please select a different date.');
-                }
-                // Highlight the date input
-                const dateInput = document.getElementById('selectedDate');
-                if (dateInput) {
-                    dateInput.focus();
-                    dateInput.classList.add('border-red-500', 'bg-red-50');
-                }
-                return;
-            }
             
             // Validate time is one of the allowed slots for the selected date (weekday/weekend)
             const allowedTimeSlots = getTimeSlotsForDateAdmin(payload.selectedDate);
@@ -2036,28 +1833,12 @@ export function attachAppointmentsListeners() {
                 const timeSlotsText = isWeekend 
                     ? '8:00 AM, 10:00 AM, 1:00 PM, 3:00 PM, 5:00 PM, 7:00 PM'
                     : '8:00 AM, 12:00 PM, 4:00 PM, 6:00 PM, 8:00 PM';
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Invalid Time Slot',
-                        text: `Please select one of the available time slots for this date: ${timeSlotsText}`,
-                        confirmButtonText: 'OK',
-                        confirmButtonColor: '#ec4899'
-                    });
-                } else {
-                    alert(`Please select one of the available time slots for this date: ${timeSlotsText}`);
-                }
                 alert(`Please select one of the available time slots for this date: ${timeSlotsText}`);
                 return;
             }
             
             createWalkInBooking?.(payload);
             walkInForm.reset();
-            // Clear any error messages
-            const errorMsg = document.getElementById('blockedDateError');
-            if (errorMsg) {
-                errorMsg.style.display = 'none';
-            }
         });
     }
 
@@ -2085,21 +1866,9 @@ export function attachAppointmentsListeners() {
     });
     
     // Initialize time inputs when appointments page loads
-    setTimeout(async () => {
-        // Initialize blocked days cache for walk-in form validation
-        await initializeBlockedDaysCacheAdmin();
-        
+    setTimeout(() => {
         if (typeof window.initializeTimeInputs === 'function') {
             window.initializeTimeInputs();
-        }
-        
-        // Set initial date to today and update time options (check for blocked date)
-        const dateInput = document.getElementById('selectedDate');
-        if (dateInput) {
-            const today = new Date().toISOString().split('T')[0];
-            dateInput.value = today;
-            dateInput.min = today; // Prevent selecting past dates
-            await window.updateTimeOptions(today);
         }
     }, 100);
 }

@@ -1,6 +1,28 @@
 // client_dashboard_template.js
 
 export const clientDashboardTemplate = `
+            <style>
+            /* Custom scrollbar styling for appointment and review sections */
+            .custom-scrollbar::-webkit-scrollbar {
+                width: 8px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-track {
+                background: #f1f1f1;
+                border-radius: 10px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb {
+                background: #ec4899;
+                border-radius: 10px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                background: #db2777;
+            }
+            /* Firefox */
+            .custom-scrollbar {
+                scrollbar-width: thin;
+                scrollbar-color: #ec4899 #f1f1f1;
+            }
+        </style>
         <header class="sticky top-0 bg-white shadow-lg z-50">
             <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
                 <a href="homepage.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
@@ -47,11 +69,11 @@ export const clientDashboardTemplate = `
         </section>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <section class="history-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl">
-                <div class="history-header mb-6 border-b pb-4 border-gray-100">
+            <section class="history-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col">
+                <div class="history-header mb-6 border-b pb-4 border-gray-100 flex-shrink-0">
                     <h2 class="history-title font-['Playfair_Display'] text-3xl font-bold text-pink-600">Appointment History</h2>
                 </div>
-                <div class="appointments-grid" id="appointmentsGrid">
+                    <div class="appointments-grid flex-1 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="appointmentsGrid" style="min-height: 200px;">
                     <div class="empty-state text-center p-8 text-gray-500">
                         <div class="empty-icon text-5xl mb-4 opacity-70">📅</div>
                         <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Appointments Yet</h3>
@@ -63,11 +85,11 @@ export const clientDashboardTemplate = `
                 </div>
             </section>
 
-            <section class="reviews-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl">
-                <div class="history-header mb-6 border-b pb-4 border-gray-100">
+            <section class="reviews-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col">
+                <div class="history-header mb-6 border-b pb-4 border-gray-100 flex-shrink-0">
                     <h2 class="history-title font-['Playfair_Display'] text-3xl font-bold text-pink-600">Your Reviews</h2>
                 </div>
-                <div class="reviews-grid" id="reviewsGrid">
+                <div class="reviews-grid flex-1 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="reviewsGrid" style="min-height: 200px;">
                     <div class="empty-state text-center p-8 text-gray-500">
                         <div class="empty-icon text-5xl mb-4 opacity-70">⭐</div>
                         <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Reviews Yet</h3>
@@ -91,11 +113,11 @@ export const clientDashboardTemplate = `
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-3">Rating</label>
                     <div class="flex gap-2" id="starRating">
-                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="1">⭐</button>
-                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="2">⭐</button>
-                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="3">⭐</button>
-                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="4">⭐</button>
-                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="5">⭐</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="1">★</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="2">★</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="3">★</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="4">★</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="5">★</button>
                     </div>
                     <input type="hidden" id="reviewRating" required />
                 </div>
