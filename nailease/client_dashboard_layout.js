@@ -2,6 +2,19 @@ import { clientDashboardTemplate } from "./client_dashboard_template.js";
 // UPDATED: Imported deleteReview for the action listeners
 import { getClientAppointments, submitReview, getUserReviews, deleteReview } from './review-logic.js';
 
+// Ensure SweetAlert2 is available (loaded once on demand)
+async function ensureSweetAlert() {
+    if (typeof window !== 'undefined' && window.Swal) return;
+    await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
 /**
  * Renders the full client dashboard into the main app container.
  * @param {HTMLElement} container - The #app-content container.
@@ -209,16 +222,36 @@ function attachReviewActionsListeners(userId) {
         if (btn.listener) btn.removeEventListener('click', btn.listener); 
         
         const listener = async (e) => {
+            await ensureSweetAlert();
             const reviewId = e.currentTarget.dataset.reviewId;
-            if (confirm('Are you sure you want to delete this review? This action is permanent and cannot be undone.')) {
-                try {
-                    await deleteReview(reviewId); // Call imported function from review-logic.js
-                    alert('Review deleted successfully!');
-                    await loadUserReviews(userId); // Reload reviews list
-                } catch (error) {
-                    console.error('Failed to delete review:', error);
-                    alert('Failed to delete review. Please check console for details.');
-                }
+            try {
+                const result = await Swal.fire({
+                    title: 'Delete this review?',
+                    text: 'This action is permanent and cannot be undone.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Yes, delete it',
+                });
+                if (!result.isConfirmed) return;
+
+                await deleteReview(reviewId); // Call imported function from review-logic.js
+                await Swal.fire({
+                    title: 'Deleted!',
+                    text: 'Review deleted successfully.',
+                    icon: 'success',
+                    confirmButtonColor: '#10b981',
+                });
+                await loadUserReviews(userId); // Reload reviews list
+            } catch (error) {
+                console.error('Failed to delete review:', error);
+                await Swal.fire({
+                    title: 'Error',
+                    text: 'Failed to delete review. Please try again.',
+                    icon: 'error',
+                    confirmButtonColor: '#ef4444',
+                });
             }
         };
         btn.addEventListener('click', listener);
@@ -397,7 +430,7 @@ function openAppointmentDetailsModal(appointment) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'appointmentDetailsModal';
-        modal.className = 'fixed inset-0 bg-black/70 z-50 hidden items-center justify-center p-4';
+        modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4';
         modal.innerHTML = `<div class="bg-white rounded-2xl p-6 max-w-xl w-full relative"><button id="closeAppointmentDetails" class="absolute top-3 right-4 text-2xl">×</button><div id="appointmentDetailsContent"></div></div>`;
         document.body.appendChild(modal);
         modal.addEventListener('click', (e)=>{ if (e.target === modal) { modal.classList.add('hidden'); document.body.style.overflow=''; }});
@@ -437,6 +470,15 @@ export function attachClientDashboardListeners(user, clientData, logoutUser, sen
     const originalPhone = clientData.phone || '';
     const originalName = clientData.name || user.displayName;
     
+    // --- Header account icon navigation (match public behavior) ---
+    const accountBtn = document.getElementById('accountLinkBtn');
+    if (accountBtn) {
+        accountBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = 'index.html';
+        });
+    }
+
     // --- Modal Controls ---
     const editModal = document.getElementById('editModal');
     const editProfileBtn = document.getElementById('editProfileBtn');

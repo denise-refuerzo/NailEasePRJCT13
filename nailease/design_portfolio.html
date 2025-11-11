@@ -7,10 +7,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> 
     <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                overflow-x: hidden;
+            }
             body {
                     font-family: 'Inter', sans-serif;
                 background-color: #f7f9fb;
                 min-height: 100vh;
+            }
+            #public-root {
+                width: 100vw;
+                max-width: 100vw;
+                margin-left: calc(50% - 50vw);
+                margin-right: calc(50% - 50vw);
             }
         /* Custom styles for the responsive grid cards */
             .design-grid {

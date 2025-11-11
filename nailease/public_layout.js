@@ -135,14 +135,23 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
             .public-card-promo, .public-card-credential {
                 scroll-snap-align: start; 
             }
+
+            /* Full-bleed root to break out of centered parents */
+            #public-root {
+                width: 100vw;
+                max-width: 100vw;
+                margin-left: calc(50% - 50vw);
+                margin-right: calc(50% - 50vw);
+            }
+            html, body { margin: 0; padding: 0; overflow-x: hidden; }
         </style>
     `;
     
     return `
         ${customStyle}
-        <div class="min-h-screen bg-pink-50/50">
+        <div id="public-root" class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
-                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0">
                     <a href="home.html" class="shadow-sm hover:shadow-md transition">
                         <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
                     </a>

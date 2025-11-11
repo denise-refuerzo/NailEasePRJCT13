@@ -151,17 +151,6 @@ const unavailableDates = [
     '2024-12-25', '2024-12-31', '2025-01-01', '2024-12-22', '2024-12-29'
 ];
 
-    const accountBtn = document.getElementById('accountLinkBtn');
-
-    if (accountBtn) { 
-        accountBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            window.location.href = 'index.html'; 
-        });
-    } else {
-        console.error("Account button (#accountLinkBtn) not found!"); 
-    }
-
 function generateCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -1487,38 +1476,13 @@ async function completeBooking() {
         }
         
         setTimeout(() => {
-    console.log('Booking confirmation sent!');
-    
-    // --- SWEETALERT2 SUCCESS MESSAGE WITH REDIRECT ---
-    Swal.fire({
-        title: "Booking Submitted!",
-        text: "Your receipt has been uploaded and will be reviewed by our team.",
-        icon: "success",
-        confirmButtonText: "Got It",
-        confirmButtonColor: '#EC4899' // Pink color
-    }).then((result) => {
-        // --- THIS BLOCK HANDLES THE REDIRECTION ---
-        if (result.isConfirmed) {
-            // Redirect the user to the homepage
-            window.location.href = 'homepage.html'; 
-        }
-        // ---------------------------------------------
-    });
-    // --------------------------------------------------
-
-}, 2000); // The 2000ms delay remains
-} catch (error) {
-    console.error('Error completing booking:', error);
-    
-    // --- SWEETALERT2 ERROR MESSAGE (No change needed here) ---
-    Swal.fire({
-        title: "Booking Failed",
-        text: "An error occurred while completing your booking. Please try again or contact support.",
-        icon: "error",
-        confirmButtonText: "Try Again",
-        confirmButtonColor: '#EF4444' // Red color
-    });
-}
+            console.log('Booking confirmation sent!');
+            alert('Booking submitted successfully! Your receipt has been uploaded and will be reviewed by our team.');
+        }, 2000);
+    } catch (error) {
+        console.error('Error completing booking:', error);
+        alert('An error occurred while completing your booking. Please try again or contact support.');
+    }
 }
 
 // Download booking details

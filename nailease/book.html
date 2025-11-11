@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DCAC NailEase - Book Your Design</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
@@ -252,9 +250,9 @@
 <body>
     <div class="min-h-screen bg-pink-50/50">
         <!-- Header -->
-        <div class="min-h-screen bg-pink-50/50 m-0 p-0">
+        <div id="public-root" class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
-                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <div class="w-full px-4 sm:px-6 lg:px-6 py-4 flex justify-between items-center max-w-none mx-0">
                     <a href="home.html" class="shadow-sm hover:shadow-md transition">
                         <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
                     </a>

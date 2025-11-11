@@ -387,9 +387,18 @@ const renderPortfolioPage = () => {
 
 
     const pageHtml = `
-        <div class="min-h-screen bg-pink-50/50 m-0 p-0">
+        <style>
+            #public-root {
+                width: 100vw;
+                max-width: 100vw;
+                margin-left: calc(50% - 50vw);
+                margin-right: calc(50% - 50vw);
+            }
+            html, body { margin: 0; padding: 0; overflow-x: hidden; }
+        </style>
+        <div id="public-root" class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
-                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0">
                     <a href="home.html" class="shadow-sm hover:shadow-md transition">
                         <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
                     </a>

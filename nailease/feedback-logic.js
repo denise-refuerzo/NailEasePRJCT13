@@ -46,10 +46,27 @@ async function renderFeedbackPage() {
         console.log('Current photos to display:', currentPhotos.length);
         console.log('Current photos data:', currentPhotos);
         
+        const sharedLayoutStyles = `
+            <style>
+                #public-root {
+                    width: 100vw;
+                    max-width: 100vw;
+                    margin-left: calc(50% - 50vw);
+                    margin-right: calc(50% - 50vw);
+                }
+                html, body { margin: 0; padding: 0; overflow-x: hidden; }
+                .custom-scroll-style::-webkit-scrollbar { display: none; }
+                .custom-scroll-style { -ms-overflow-style: none; scrollbar-width: none; }
+                .text-shadow-pink { text-shadow: 1px 1px 0px rgba(255, 192, 203, 0.5); }
+                .shadow-inner-pink { box-shadow: inset 0 0 5px rgba(255, 192, 203, 0.4); }
+            </style>
+        `;
+        
         container.innerHTML = `
-            <div class="min-h-screen bg-pink-50/50 m-0 p-0">
+            ${sharedLayoutStyles}
+            <div id="public-root" class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
-                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0">
                     <a href="home.html" class="shadow-sm hover:shadow-md transition">
                         <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
                     </a>
@@ -187,9 +204,8 @@ async function renderFeedbackPage() {
                         </div>
                     </div>
                 </main>
-                
                 <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
-                    &copy; 2024 DCAC. All rights reserved.
+                    &copy; 2024 D'UR LASHNAILS BY DES. All rights reserved.
                 </footer>
                 
                 <!-- Photo Modal/Lightbox -->

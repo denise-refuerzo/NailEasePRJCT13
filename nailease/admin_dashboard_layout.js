@@ -1,4 +1,4 @@
-import { updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { updateProfile, updateEmail, getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline, saveQRCode, deleteQRCode 
 } from './auth-logic.js';
 import { getAllReviews, deleteReview, getExternalReviewPhotos, uploadExternalReviewPhoto, deleteExternalReviewPhoto } from './review-logic.js';
@@ -283,9 +283,9 @@ const adminProfileModalHtml = `
                 <input type="text" id="adminNameInput" required
                        class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
 
-                <label for="adminEmailInput" class="block text-sm font-medium text-gray-700">Email Address (Read-only)</label>
-                <input type="email" id="adminEmailInput" disabled
-                       class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border bg-gray-100 cursor-not-allowed">
+                <label for="adminEmailInput" class="block text-sm font-medium text-gray-700">Email Address</label>
+                <input type="email" id="adminEmailInput"
+                       class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border bg-white">
                        
                 <p id="profileError" class="text-red-500 text-sm hidden"></p>
 
@@ -1879,10 +1879,13 @@ export function renderAdminLayout(container, user) {
     const avatarLetter = adminName.charAt(0).toUpperCase();
 
     const adminHTML = `
-    <div class="min-h-screen bg-pink-50/50">
-        <div class="min-h-screen bg-pink-50/50 overflow-x-hidden" style="width: 100vw; position: relative; left: 50%; transform: translateX(-50%);">
+    <style>
+        #admin-root { width: 100vw; max-width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+        html, body { margin: 0; padding: 0; overflow-x: hidden; }
+    </style>
+    <div id="admin-root" class="min-h-screen bg-pink-50/50">
         <header class="sticky top-0 bg-white shadow-lg z-50">
-            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-none mx-0">
                 <a href="home.html" class="shadow-sm hover:shadow-md transition">
                     <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
                 </a>
@@ -2031,7 +2034,6 @@ export function renderAdminLayout(container, user) {
                     </div>
                 </div>
             </div>
-        </div>
        ${adminProfileModalHtml}
     </div>
 `;
@@ -2046,7 +2048,7 @@ export function renderAdminLayout(container, user) {
  * @param {object} user - The authenticated user object.
  */
 
-export function attachAdminDashboardListeners(logoutUser, user, setPage, updateProfile) {
+export function attachAdminDashboardListeners(logoutUser, user, setPage, updateProfileFn) {
         const navigate = typeof setPage === 'function' ? setPage : window.setPage;
         const setStatusFilter = typeof window.setBookingStatusFilter === 'function' ? window.setBookingStatusFilter : null;
         const setAppointmentsTab = typeof window.setAppointmentsTab === 'function' ? window.setAppointmentsTab : null;
@@ -2101,6 +2103,12 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
             const adminProfileModal = document.getElementById('adminProfileModal');
             if (adminProfileModal) {
                 // This will now REMOVE the 'hidden' class, making the modal visible.
+                // Prefill inputs from current user
+                const authUser = user || (getAuth && getAuth().currentUser) || null;
+                const nameInput = document.getElementById('adminNameInput');
+                const emailInput = document.getElementById('adminEmailInput');
+                if (nameInput && authUser) nameInput.value = authUser.displayName || '';
+                if (emailInput && authUser) emailInput.value = authUser.email || '';
                 showModal('adminProfileModal'); 
             }
         });
@@ -2115,20 +2123,69 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
         // Admin Profile Form Submission (Uses Firebase updateProfile logic)
         document.getElementById('adminProfileForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const newName = document.getElementById('adminNameInput').value;
+            const nameEl = document.getElementById('adminNameInput');
+            const emailEl = document.getElementById('adminEmailInput');
+            const newName = nameEl ? nameEl.value.trim() : '';
+            const newEmail = emailEl ? emailEl.value.trim() : '';
             const profileError = document.getElementById('profileError');
             profileError.textContent = ''; // Clear previous errors
             profileError.classList.add('hidden');
             
             try {
-                // Assumes 'updateProfile' is the imported Firebase function
-                await updateProfile(user, { displayName: newName }); 
-                window.renderApp(); // Re-render to show the new name on the dashboard
+                const auth = getAuth ? getAuth() : null;
+                const currentUser = user || (auth ? auth.currentUser : null);
+                if (!currentUser) throw new Error('No authenticated user found.');
+
+                // Update display name if provided
+                if (newName && newName !== (currentUser.displayName || '')) {
+                    await updateProfile(currentUser, { displayName: newName });
+                }
+                // Update email if changed
+                if (newEmail && newEmail !== (currentUser.email || '')) {
+                    await updateEmail(currentUser, newEmail);
+                }
+
+                // Reflect changes in the current UI without full re-render
+                try {
+                    const nameElDom = document.getElementById('adminName');
+                    const emailElDom = document.getElementById('adminEmail');
+                    const avatarEl = document.getElementById('adminAvatar');
+                    if (nameElDom && newName) nameElDom.textContent = newName;
+                    if (emailElDom && newEmail) emailElDom.textContent = newEmail;
+                    if (avatarEl && newName) {
+                        const letter = newName.charAt(0).toUpperCase();
+                        avatarEl.textContent = letter;
+                    }
+                } catch (_) {}
+
+                // Success alert
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Profile Updated',
+                        text: 'Your display name and/or email were updated successfully.',
+                        confirmButtonColor: '#ec4899'
+                    });
+                }
+
                 hideModal('adminProfileModal');
             } catch (error) {
                 console.error("Failed to update profile:", error);
                 profileError.textContent = "Update failed: " + error.message;
                 profileError.classList.remove('hidden');
+                // Error alert
+                if (typeof Swal !== 'undefined') {
+                    let friendly = error?.message || 'Something went wrong. Please try again.';
+                    if (friendly.includes('requires-recent-login')) {
+                        friendly = 'Please sign in again to update your email, then retry.';
+                    }
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Update Failed',
+                        text: friendly,
+                        confirmButtonColor: '#ef4444'
+                    });
+                }
             }
         });
         
@@ -2223,7 +2280,7 @@ export function renderReviewManagementLayout(container, user, state) {
     
     const reviewsHTML = `
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
-            <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
+            <header class="flex flex-wrap items-center justify-between p-4 bg-white shadow-md border border-gray-100">
                 <div class="flex items-center space-x-4">
                     <button onclick="window.setPage('dashboard')" class="flex items-center text-pink-600 hover:text-pink-700 transition">
                         <i data-lucide="arrow-left" class="w-6 h-6 mr-2"></i>
