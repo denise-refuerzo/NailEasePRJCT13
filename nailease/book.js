@@ -118,7 +118,86 @@ const unavailableDates = [
     '2024-12-25', '2024-12-31', '2025-01-01', '2024-12-22', '2024-12-29'
 ];
 
-function generateCalendar() {
+// Blocked days functionality
+const APP_ID_BLOCKED = 'nailease25-iapt';
+const BLOCKED_DAYS_COLLECTION = `artifacts/${APP_ID_BLOCKED}/blockedDays`;
+let blockedDaysCache = new Set();
+
+/**
+ * Check if a date is blocked
+ */
+async function isDayBlocked(dateString) {
+    if (blockedDaysCache.has(dateString)) {
+        return true;
+    }
+    
+    try {
+        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
+        const blockedDaySnap = await getDoc(blockedDayRef);
+        
+        if (blockedDaySnap.exists()) {
+            const data = blockedDaySnap.data();
+            if (data.blocked === true) {
+                blockedDaysCache.add(dateString);
+                return true;
+            }
+        }
+    } catch (error) {
+        console.error('Error checking blocked day:', error);
+    }
+    
+    return false;
+}
+
+/**
+ * Initialize blocked days listener
+ */
+async function initializeBlockedDays() {
+    try {
+        const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const blockedDaysRef = collection(db, BLOCKED_DAYS_COLLECTION);
+        
+        onSnapshot(blockedDaysRef, (snapshot) => {
+            blockedDaysCache.clear();
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.date && data.blocked === true) {
+                    blockedDaysCache.add(data.date);
+                } else if (doc.id && data.blocked === true) {
+                    // Also check if the document ID is the date string
+                    blockedDaysCache.add(doc.id);
+                }
+            });
+            // Regenerate calendar if needed
+            if (currentStep === 2) {
+                generateCalendar().catch(err => console.error('Error regenerating calendar:', err));
+            }
+        });
+    } catch (error) {
+        console.error('Error initializing blocked days:', error);
+    }
+}
+
+async function generateCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     
@@ -132,6 +211,32 @@ function generateCalendar() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
+    // Collect all date strings in the visible calendar
+    const startDate = new Date(firstDayOfMonth);
+    startDate.setDate(startDate.getDate() - firstDayWeekday);
+    
+    const dateStrings = [];
+    for (let week = 0; week < 6; week++) {
+        for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+            const currentDateObj = new Date(startDate);
+            currentDateObj.setDate(startDate.getDate() + (week * 7 + dayOfWeek));
+            
+            const day = currentDateObj.getDate();
+            const currentMonth = currentDateObj.getMonth();
+            const currentYear = currentDateObj.getFullYear();
+            const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            dateStrings.push(dateString);
+        }
+    }
+    
+    // Batch check blocked days for all visible dates
+    const blockedDaysPromises = dateStrings.map(dateStr => isDayBlocked(dateStr));
+    const blockedDaysResults = await Promise.all(blockedDaysPromises);
+    const blockedDaysMap = new Map();
+    dateStrings.forEach((dateStr, index) => {
+        blockedDaysMap.set(dateStr, blockedDaysResults[index]);
+    });
+    
     let html = '';
     
     const dayHeaders = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -139,9 +244,6 @@ function generateCalendar() {
     dayHeaders.forEach((day, index) => {
         html += `<div class="calendar-day header bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold text-sm flex items-center justify-center" style="grid-column: ${index + 1};">${day}</div>`;
     });
-    
-    const startDate = new Date(firstDayOfMonth);
-    startDate.setDate(startDate.getDate() - firstDayWeekday);
     
     let dayCount = 0;
     for (let week = 0; week < 6; week++) {
@@ -160,25 +262,41 @@ function generateCalendar() {
             const isToday = currentDateObj.getTime() === today.getTime();
             const isUnavailable = unavailableDates.includes(dateString);
             const isSelected = selectedDate === dateString;
+            const dayIsBlocked = blockedDaysMap.get(dateString) || false;
             
             let classes = 'calendar-day bg-white text-gray-800 font-bold flex items-center justify-center cursor-pointer hover:bg-pink-100 transition-all';
             let clickHandler = '';
+            let inlineStyle = '';
             
             if (!isCurrentMonth || isPast) {
                 classes = 'calendar-day bg-gray-50 text-gray-400 cursor-not-allowed flex items-center justify-center';
+            } else if (dayIsBlocked) {
+                // Blocked day - red background, red text, strikethrough, red border (still clickable)
+                classes = 'calendar-day bg-red-100 text-red-600 font-bold flex items-center justify-center cursor-pointer transition-all';
+                inlineStyle = 'text-decoration: line-through; text-decoration-thickness: 2px; border: 2px solid #dc2626;';
+                clickHandler = `onclick="selectDate('${dateString}')"`;
             } else if (isUnavailable) {
                 classes = 'calendar-day unavailable flex items-center justify-center';
             } else {
                 clickHandler = `onclick="selectDate('${dateString}')"`;
             }
             
-            if (isToday) classes += ' today border-2 border-orange-500';
-            if (isSelected) classes = 'calendar-day selected bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold flex items-center justify-center relative';
+            if (isToday && !dayIsBlocked) {
+                classes += ' today border-2 border-orange-500';
+            }
+            
+            if (isSelected && !dayIsBlocked) {
+                classes = 'calendar-day selected bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold flex items-center justify-center relative';
+                inlineStyle = '';
+            } else if (isSelected && dayIsBlocked) {
+                // Selected blocked day - keep red styling but make it more prominent
+                inlineStyle = 'text-decoration: line-through; text-decoration-thickness: 2px; border: 2px solid #dc2626; background-color: #fee2e2; color: #dc2626;';
+            }
             
             const gridRow = week + 2; 
             const gridCol = dayOfWeek + 1;
             
-            html += `<div class="${classes}" data-date="${dateString}" ${clickHandler} style="grid-row: ${gridRow}; grid-column: ${gridCol};">${day}</div>`;
+            html += `<div class="${classes}" data-date="${dateString}" ${clickHandler} style="grid-row: ${gridRow}; grid-column: ${gridCol}; ${inlineStyle}">${day}</div>`;
             
             dayCount++;
         }
@@ -186,7 +304,7 @@ function generateCalendar() {
     document.getElementById('calendarGrid').innerHTML = html;
 }
 
-function selectDate(dateString) {
+async function selectDate(dateString) {
     const dateElement = document.querySelector(`[data-date="${dateString}"]`);
     if (!dateElement || dateElement.classList.contains('disabled') || 
         dateElement.classList.contains('unavailable') || 
@@ -198,11 +316,40 @@ function selectDate(dateString) {
         showStep(2);
     }
     
+    // Remove previous selection styling
     document.querySelectorAll('.calendar-day.selected').forEach(el => {
-        el.classList.remove('selected');
+        el.classList.remove('selected', 'blocked-selected');
+        // Reset inline styles
+        el.style.backgroundColor = '';
+        el.style.color = '';
+        el.style.textDecoration = '';
+        el.style.borderColor = '';
+        el.style.borderWidth = '';
     });
     
-    dateElement.classList.add('selected');
+    // Check if the selected date is blocked
+    const dayIsBlocked = await isDayBlocked(dateString);
+    
+    if (dayIsBlocked) {
+        // Apply red color and strikethrough for blocked dates (already visible, but make it more prominent when selected)
+        dateElement.classList.add('selected', 'blocked-selected');
+        dateElement.style.backgroundColor = '#fee2e2'; // red-100
+        dateElement.style.color = '#dc2626'; // red-600
+        dateElement.style.textDecoration = 'line-through';
+        dateElement.style.textDecorationThickness = '2px';
+        dateElement.style.borderColor = '#dc2626'; // red-600
+        dateElement.style.borderWidth = '2px';
+    } else {
+        // Normal selected styling - remove any blocked styling
+        dateElement.classList.add('selected');
+        dateElement.classList.remove('blocked-selected');
+        dateElement.style.backgroundColor = '';
+        dateElement.style.color = '';
+        dateElement.style.textDecoration = '';
+        dateElement.style.borderColor = '';
+        dateElement.style.borderWidth = '';
+    }
+    
     selectedDate = dateString;
     bookingData.selectedDate = dateString;
     
@@ -219,7 +366,7 @@ function selectDate(dateString) {
 
 document.getElementById('prevMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() - 1);
-    generateCalendar();
+    generateCalendar().catch(err => console.error('Error generating calendar:', err));
     if (currentStep === 2) {
         showStep(2);
     }
@@ -227,7 +374,7 @@ document.getElementById('prevMonth').addEventListener('click', () => {
 
 document.getElementById('nextMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
-    generateCalendar();
+    generateCalendar().catch(err => console.error('Error generating calendar:', err));
     if (currentStep === 2) {
         showStep(2);
     }
@@ -265,6 +412,129 @@ function getTimeSlotsForDate(dateString) {
 const unavailableTimeSlots = {};
 const bookedAppointmentsByDate = {}; // Store full appointment details by date
 let unsubscribeBookedSlotsListener = null;
+
+// Check if a time slot has already passed for today's date
+function isTimePassed(dateString, timeString) {
+    if (!dateString || !timeString) return false;
+    
+    // Parse the selected date
+    const [year, month, day] = dateString.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    
+    // Get today's date (reset to midnight for comparison)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    
+    // If the selected date is not today, the time hasn't passed
+    if (selectedDateOnly.getTime() !== today.getTime()) {
+        return false;
+    }
+    
+    // Parse time string (e.g., "8:00 AM" or "2:00 PM")
+    const timeMatch = timeString.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!timeMatch) return false;
+    
+    let hours = parseInt(timeMatch[1]);
+    const minutes = parseInt(timeMatch[2]);
+    const period = timeMatch[3].toUpperCase();
+    
+    // Convert to 24-hour format
+    if (period === 'PM' && hours !== 12) {
+        hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+    }
+    
+    // Create a date object for the selected date and time
+    const selectedDateTime = new Date(year, month - 1, day, hours, minutes);
+    const now = new Date();
+    
+    // Check if the time has passed
+    return selectedDateTime < now;
+}
+
+// Fetch booked time slots from Firestore for a specific date with full appointment details
+async function fetchBookedTimeSlots(dateString) {
+    try {
+        // Import Firestore functions
+        const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const APP_ID = 'nailease25-iapt';
+        const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+        
+        // Query for existing appointments with same date
+        // Exclude cancelled appointments
+        const q = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', dateString)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        
+        // Collect booked times and appointment details (normalize to 12-hour format)
+        const bookedTimes = [];
+        const appointmentsByTime = {};
+        
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Only consider non-cancelled appointments
+            if (data.status !== 'cancelled' && data.selectedTime) {
+                let time = data.selectedTime;
+                // Normalize time format (handle both 12-hour and 24-hour)
+                if (!time.includes('AM') && !time.includes('PM')) {
+                    // Convert 24-hour format (08:00) to 12-hour format (8:00 AM)
+                    const [hours, minutes] = time.split(':');
+                    const hour24 = parseInt(hours, 10);
+                    let hour12 = hour24;
+                    let period = 'AM';
+                    
+                    if (hour24 === 0) {
+                        hour12 = 12;
+                        period = 'AM';
+                    } else if (hour24 === 12) {
+                        hour12 = 12;
+                        period = 'PM';
+                    } else if (hour24 > 12) {
+                        hour12 = hour24 - 12;
+                        period = 'PM';
+                    } else {
+                        hour12 = hour24;
+                        period = 'AM';
+                    }
+                    time = `${hour12}:00 ${period}`;
+                }
+                bookedTimes.push(time);
+                
+                // Store full appointment details
+                appointmentsByTime[time] = {
+                    clientName: data.clientName || data.personalInfo?.fullName || 'Unknown Client',
+                    source: data.source || 'online',
+                    status: data.status || 'pending'
+                };
+            }
+        });
+        
+        // Update unavailableTimeSlots and bookedAppointmentsByDate for this date
+        unavailableTimeSlots[dateString] = bookedTimes;
+        bookedAppointmentsByDate[dateString] = appointmentsByTime;
+        
+        return bookedTimes;
+    } catch (error) {
+        console.error('Error fetching booked time slots:', error);
+        return [];
+    }
+}
+
 
 // Check if a time slot has already passed for today's date
 function isTimePassed(dateString, timeString) {
@@ -458,6 +728,9 @@ async function generateTimeSlots(date) {
     
     console.log('generateTimeSlots called with date:', date);
     
+    // Check if day is blocked
+    const dayIsBlocked = await isDayBlocked(date);
+    
     // Fetch real-time booked slots from Firestore
     await fetchBookedTimeSlots(date);
     const unavailableForDate = unavailableTimeSlots[date] || [];
@@ -476,7 +749,9 @@ async function generateTimeSlots(date) {
     const timeSlotInfoEl = document.getElementById('timeSlotInfo');
     
     if (timeSlotInfoEl) {
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        if (dayIsBlocked) {
+            timeSlotInfoEl.innerHTML = `<strong style="color: #dc2626;">${dayName} - This day is blocked. All time slots are unavailable.</strong>`;
+        } else if (dayOfWeek >= 1 && dayOfWeek <= 5) {
             // Weekdays (Mon-Fri)
             timeSlotInfoEl.innerHTML = `<strong>${dayName} (Weekday):</strong> 8:00 AM, 12:00 PM, 4:00 PM, 6:00 PM, 8:00 PM`;
         } else {
@@ -490,6 +765,13 @@ async function generateTimeSlots(date) {
         const isPassed = isTimePassed(date, time);
         const baseClasses = 'px-4 py-3 border-2 rounded-xl text-center font-bold transition-all';
         
+        if (dayIsBlocked) {
+            // Day is blocked - all slots unavailable
+            html += `<div class="${baseClasses} bg-red-100 text-red-700 border-red-500 cursor-not-allowed" data-time="${time}" title="This day is blocked" onclick="selectTime('${time}')">
+                <div class="text-base font-extrabold">${time}</div>
+                <div class="text-xs text-red-800 font-semibold mt-1">Day Blocked</div>
+            </div>`;
+        } else if (isPassed) {
         if (isPassed) {
             // Time has already passed - mark as unavailable with red styling
             html += `<div class="${baseClasses} bg-red-50 text-red-400 border-red-300 cursor-not-allowed" data-time="${time}" title="This time already passed" onclick="selectTime('${time}')">
@@ -529,12 +811,17 @@ function selectTime(time) {
     if (timeElement.classList.contains('unavailable') || 
         timeElement.classList.contains('cursor-not-allowed') ||
         timeElement.title === 'This time already passed' ||
+        timeElement.title === 'This time slot is already booked' ||
+        timeElement.title === 'This day is blocked') {
+        // Show alert for passed times, booked slots, or blocked days
         timeElement.title === 'This time slot is already booked') {
         // Show alert for passed times or booked slots
         if (timeElement.title === 'This time already passed') {
             alert('This time already passed. Please select a future time slot.');
         } else if (timeElement.title === 'This time slot is already booked') {
             alert('This time slot is already booked. Please select a different time.');
+        } else if (timeElement.title === 'This day is blocked') {
+            alert('This day is blocked. Please select a different date.');
         }
         return;
     }
@@ -783,8 +1070,9 @@ function saveDetails() {
     showDisplayView();
 }
 
-function nextStep() {
-    if (!validateCurrentStep()) {
+async function nextStep() {
+    const isValid = await validateCurrentStep();
+    if (!isValid) {
         return;
     }
     
@@ -805,7 +1093,7 @@ function previousStep() {
 }
 
 // Validation functions
-function validateCurrentStep() {
+async function validateCurrentStep() {
     switch (currentStep) {
         case 1:
             return true;
@@ -813,6 +1101,17 @@ function validateCurrentStep() {
             if (!bookingData.selectedDate) {
                 alert('Please select a date for your appointment.');
                 return false;
+            }
+            // Check if selected date is blocked
+            try {
+                const blocked = await isDayBlocked(bookingData.selectedDate);
+                if (blocked) {
+                    alert('The selected date is blocked. Please select a different date.');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error checking blocked date:', error);
+                // If check fails, allow to proceed
             }
             return true;
         case 3:
@@ -1011,6 +1310,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (selectedPaymentMethodLabel) {
         selectedPaymentMethodLabel.textContent = PAYMENT_METHOD_LABELS[bookingData.paymentMethod] || bookingData.paymentMethod.toUpperCase();
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupQRCodeRealtimeListener();
+    updatePaymentQRCode();
+});
+
 });
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1339,6 +1645,14 @@ async function saveBookingToFirestore(bookingData, receiptUrl) {
 // Complete booking
 async function completeBooking() {
     try {
+        // Check if selected date is blocked before completing booking
+        const dayIsBlocked = await isDayBlocked(bookingData.selectedDate);
+        if (dayIsBlocked) {
+            alert('The selected date is blocked. Please select a different date.');
+            showStep(2);
+            return;
+        }
+        
         const bookingId = 'DCAC-' + new Date().getFullYear() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
         
         // Store bookingId in bookingData for calendar integration
@@ -1499,8 +1813,13 @@ window.resendOTP = resendOTP;
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize calendar and steps immediately (before auth check)
     initializeFromURL();
-    generateCalendar();
+    generateCalendar().catch(err => console.error('Error generating calendar:', err));
     showStep(currentStep);
+    
+    // Initialize blocked days listener
+    initializeBlockedDays().catch(err => {
+        console.error('Error initializing blocked days:', err);
+    });
     
     // Scroll to step1 if hash is present
     if (window.location.hash === '#step1') {
@@ -1569,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // User is logged in, refresh initialization
                 initializeFromURL();
-                generateCalendar();
+                generateCalendar().catch(err => console.error('Error generating calendar:', err));
                 showStep(currentStep); 
                 
                 // Auto-advance from step 1 if design is pre-selected
@@ -1586,7 +1905,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Failed to load Firebase Auth:', err);
             // Fallback: try to proceed without auth check (for testing)
             initializeFromURL();
-            generateCalendar();
+            generateCalendar().catch(err => console.error('Error generating calendar:', err));
             showStep(currentStep);
         });
     } else {
@@ -1599,7 +1918,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             return;
                         }
                         initializeFromURL();
-                        generateCalendar();
+                        generateCalendar().catch(err => console.error('Error generating calendar:', err));
                         showStep(currentStep);
                     });
                 });
