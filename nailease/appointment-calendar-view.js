@@ -196,6 +196,7 @@ export async function renderAppointmentCalendar(appointments, currentMonth = new
     // Initialize blocked days cache
     await initializeBlockedDaysCache();
     
+export function renderAppointmentCalendar(appointments, currentMonth = new Date()) {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     
@@ -271,6 +272,7 @@ export async function renderAppointmentCalendar(appointments, currentMonth = new
         if (dayIsBlocked) {
             dayClasses += ' border-red-500 bg-red-50';
         } else if (isToday) {
+        if (isToday) {
             dayClasses += ' border-pink-500 bg-pink-50';
         } else if (isPast) {
             dayClasses += ' border-gray-200 opacity-60';
@@ -288,6 +290,14 @@ export async function renderAppointmentCalendar(appointments, currentMonth = new
                 <div class="space-y-1 flex flex-col items-center justify-center h-full">
                     ${!isPast ? `
                         <button class="w-full text-xs ${dayIsBlocked ? 'bg-red-100 text-red-700' : 'bg-pink-100 text-pink-700'} px-1.5 py-1 rounded font-semibold hover:${dayIsBlocked ? 'bg-red-200' : 'bg-pink-200'} transition" 
+            <div class="${dayClasses}" data-date="${dateString}" data-day="${day}">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-bold ${isToday ? 'text-pink-600' : 'text-gray-700'}">${day}</span>
+                    ${isToday ? '<span class="text-xs text-pink-600 font-semibold bg-pink-200 px-1.5 py-0.5 rounded">Today</span>' : ''}
+                </div>
+                <div class="space-y-1 flex flex-col items-center justify-center h-full">
+                    ${!isPast ? `
+                        <button class="w-full text-xs bg-pink-100 text-pink-700 px-1.5 py-1 rounded font-semibold hover:bg-pink-200 transition" 
                                 onclick="showTimeSlots('${dateString}')">
                             Time
                         </button>
@@ -505,6 +515,30 @@ export async function getAvailableTimeSlots(dateString, appointments) {
             };
         })
     };
+    return allTimeSlots.map(time => {
+        // Normalize time for comparison
+        const normalizedTime = normalizeTime(time);
+        const isBooked = bookedTimes.includes(normalizedTime) || bookedTimes.includes(time);
+        let isPassed = false;
+        
+        if (isToday) {
+            isPassed = isTimePassed(dateString, time);
+        }
+        
+        // Find the appointment that matches this time slot
+        const matchingAppointment = dayAppointments.find(apt => {
+            const aptTime = normalizeTime(apt.selectedTime);
+            return aptTime === normalizedTime || aptTime === time;
+        });
+        
+        return {
+            time,
+            available: !isBooked && !isPassed,
+            booked: isBooked,
+            passed: isPassed,
+            appointment: matchingAppointment || null
+        };
+    });
 }
 
 /**
@@ -551,6 +585,7 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
     const timeSlotsData = await getAvailableTimeSlots(dateString, appointments);
     const dayIsBlocked = timeSlotsData.dayIsBlocked;
     const timeSlots = timeSlotsData.timeSlots;
+    const timeSlots = await getAvailableTimeSlots(dateString, appointments);
     
     // Format date for display
     const [year, month, day] = dateString.split('-').map(Number);
@@ -598,6 +633,7 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
                 </div>
             `;
         } else if (slot.passed) {
+        if (slot.passed) {
             return `
                 <div class="px-4 py-3 border-2 border-red-300 rounded-xl text-center font-bold bg-red-50 text-red-400 cursor-not-allowed">
                     <div class="text-base font-extrabold">${slot.time}</div>
@@ -700,6 +736,16 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
                             <p class="${dayIsBlocked ? 'text-red-100' : 'text-pink-100'} mt-1">${formattedDate}</p>
                         </div>
                         <button onclick="closeTimeSlotsModal()" class="text-white hover:${dayIsBlocked ? 'text-red-200' : 'text-pink-200'} transition">
+    const modalHtml = `
+        <div id="timeSlotsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div class="sticky top-0 bg-gradient-to-r from-pink-500 to-pink-600 text-white p-6 rounded-t-2xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-2xl font-bold">Available Time Slots</h3>
+                            <p class="text-pink-100 mt-1">${formattedDate}</p>
+                        </div>
+                        <button onclick="closeTimeSlotsModal()" class="text-white hover:text-pink-200 transition">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>

@@ -198,6 +198,77 @@ async function renderCalendarSkeleton(currentMonth, bookingsByDate) {
         console.error('Error in renderCalendarSkeleton:', error);
         return `<div class="text-red-600 p-4">Error rendering calendar: ${error.message}</div>`;
     }
+function renderCalendarSkeleton(currentMonth, bookingsByDate) {
+    const first = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const last = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const startDay = first.getDay();
+    const totalDays = last.getDate();
+    const days = [];
+    for (let i = 0; i < startDay; i++) days.push(null);
+    for (let d = 1; d <= totalDays; d++) days.push(d);
+
+    const monthName = currentMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    let html = `
+        <div class="flex items-center justify-between mb-3">
+            <button id="pub-cal-prev" class="px-3 py-1 text-sm rounded border bg-white hover:bg-gray-50 transition">&larr; Prev</button>
+            <h3 class="text-lg font-bold text-gray-800">${monthName}</h3>
+            <button id="pub-cal-next" class="px-3 py-1 text-sm rounded border bg-white hover:bg-gray-50 transition">Next &rarr;</button>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-xs text-gray-600 mb-2">
+            <div class="text-center font-semibold">Sun</div>
+            <div class="text-center font-semibold">Mon</div>
+            <div class="text-center font-semibold">Tue</div>
+            <div class="text-center font-semibold">Wed</div>
+            <div class="text-center font-semibold">Thu</div>
+            <div class="text-center font-semibold">Fri</div>
+            <div class="text-center font-semibold">Sat</div>
+        </div>
+        <div class="grid grid-cols-7 gap-2" id="pub-cal-grid">
+    `;
+
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+
+    days.forEach((d) => {
+        if (d === null) {
+            html += `<div class="h-24 rounded-lg bg-gray-50 border"></div>`;
+        } else {
+            const dateStr = formatYmd(new Date(year, month, d));
+            const set = new Set(bookingsByDate[dateStr] || []);
+            const badge = computeDayBadge(dateStr, set);
+            
+            // Check available slots
+            const availableSlots = getTimeSlotsForDate(dateStr).filter(t => {
+                const passed = isTimePassed(dateStr, t);
+                const booked = set.has(t);
+                return !passed && !booked;
+            });
+
+            const isPast = isPastDate(dateStr);
+            const hasAvailableSlots = availableSlots.length > 0 && !isPast;
+
+            html += `
+                <div class="h-24 rounded-lg border bg-white p-2 flex flex-col justify-between" data-day="${d}">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-semibold ${isPast ? 'text-gray-400' : 'text-gray-800'}">${d}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded ${badge.cls}">${badge.text}</span>
+                    </div>
+                    <button class="text-xs px-2 py-1 rounded font-semibold transition self-stretch view-time-btn ${
+                        hasAvailableSlots 
+                            ? 'bg-pink-100 text-pink-700 hover:bg-pink-200 cursor-pointer' 
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }" 
+                    data-date="${dateStr}" 
+                    ${!hasAvailableSlots ? 'disabled' : ''}>
+                        ${hasAvailableSlots ? 'View Times' : 'No Slots'}
+                    </button>
+                </div>
+            `;
+        }
+    });
+
+    html += `</div>`;
+    return html;
 }
 
 function groupBookingsByDate(bookings) {
@@ -217,6 +288,7 @@ async function computeDayBadge(dateStr, bookedTimesSet) {
     if (dayIsBlocked) {
         return { text: 'Blocked', cls: 'bg-red-200 text-red-800' };
     }
+function computeDayBadge(dateStr, bookedTimesSet) {
     if (isPastDate(dateStr)) {
         return { text: 'Past', cls: 'bg-gray-100 text-gray-400' };
     }
@@ -266,6 +338,9 @@ async function showTimesModal(dateStr, dayBookingsSet) {
         });
         return;
     }
+    
+function showTimesModal(dateStr, dayBookingsSet) {
+    const slots = getTimeSlotsForDate(dateStr);
     
     // Filter only available slots (not booked and not passed)
     const availableSlots = slots.filter(t => {
@@ -336,6 +411,7 @@ export async function renderPublicAvailabilityCalendar(container) {
                     <p>Loading calendar...</p>
                 </div>
             </div>
+            <div id="pub-cal-root"></div>
         </div>
     `;
 
@@ -405,6 +481,40 @@ export async function renderPublicAvailabilityCalendar(container) {
     try {
         const { getFirestore, collection, onSnapshot, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
         const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+    function paint() {
+        root.innerHTML = renderCalendarSkeleton(currentMonth, bookingsByDate);
+        
+        // Add event listeners for view time buttons
+        root.querySelectorAll('.view-time-btn:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const dateStr = btn.getAttribute('data-date');
+                const set = new Set(bookingsByDate[dateStr] || []);
+                showTimesModal(dateStr, set);
+            });
+        });
+
+        // Add event listeners for navigation buttons
+        root.querySelector('#pub-cal-prev')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+            paint();
+        });
+
+        root.querySelector('#pub-cal-next')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+            paint();
+        });
+    }
+
+    // Initial paint
+    paint();
+
+    // Live bookings connection to admin calendar
+    try {
+        const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
         
         // Firebase configuration
         const firebaseConfig = {

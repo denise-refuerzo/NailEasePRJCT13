@@ -535,6 +535,129 @@ async function fetchBookedTimeSlots(dateString) {
     }
 }
 
+
+// Check if a time slot has already passed for today's date
+function isTimePassed(dateString, timeString) {
+    if (!dateString || !timeString) return false;
+    
+    // Parse the selected date
+    const [year, month, day] = dateString.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    
+    // Get today's date (reset to midnight for comparison)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    
+    // If the selected date is not today, the time hasn't passed
+    if (selectedDateOnly.getTime() !== today.getTime()) {
+        return false;
+    }
+    
+    // Parse time string (e.g., "8:00 AM" or "2:00 PM")
+    const timeMatch = timeString.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!timeMatch) return false;
+    
+    let hours = parseInt(timeMatch[1]);
+    const minutes = parseInt(timeMatch[2]);
+    const period = timeMatch[3].toUpperCase();
+    
+    // Convert to 24-hour format
+    if (period === 'PM' && hours !== 12) {
+        hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+    }
+    
+    // Create a date object for the selected date and time
+    const selectedDateTime = new Date(year, month - 1, day, hours, minutes);
+    const now = new Date();
+    
+    // Check if the time has passed
+    return selectedDateTime < now;
+}
+
+// Fetch booked time slots from Firestore for a specific date with full appointment details
+async function fetchBookedTimeSlots(dateString) {
+    try {
+        // Import Firestore functions
+        const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const APP_ID = 'nailease25-iapt';
+        const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+        
+        // Query for existing appointments with same date
+        // Exclude cancelled appointments
+        const q = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', dateString)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        
+        // Collect booked times and appointment details (normalize to 12-hour format)
+        const bookedTimes = [];
+        const appointmentsByTime = {};
+        
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Only consider non-cancelled appointments
+            if (data.status !== 'cancelled' && data.selectedTime) {
+                let time = data.selectedTime;
+                // Normalize time format (handle both 12-hour and 24-hour)
+                if (!time.includes('AM') && !time.includes('PM')) {
+                    // Convert 24-hour format (08:00) to 12-hour format (8:00 AM)
+                    const [hours, minutes] = time.split(':');
+                    const hour24 = parseInt(hours, 10);
+                    let hour12 = hour24;
+                    let period = 'AM';
+                    
+                    if (hour24 === 0) {
+                        hour12 = 12;
+                        period = 'AM';
+                    } else if (hour24 === 12) {
+                        hour12 = 12;
+                        period = 'PM';
+                    } else if (hour24 > 12) {
+                        hour12 = hour24 - 12;
+                        period = 'PM';
+                    } else {
+                        hour12 = hour24;
+                        period = 'AM';
+                    }
+                    time = `${hour12}:00 ${period}`;
+                }
+                bookedTimes.push(time);
+                
+                // Store full appointment details
+                appointmentsByTime[time] = {
+                    clientName: data.clientName || data.personalInfo?.fullName || 'Unknown Client',
+                    source: data.source || 'online',
+                    status: data.status || 'pending'
+                };
+            }
+        });
+        
+        // Update unavailableTimeSlots and bookedAppointmentsByDate for this date
+        unavailableTimeSlots[dateString] = bookedTimes;
+        bookedAppointmentsByDate[dateString] = appointmentsByTime;
+        
+        return bookedTimes;
+    } catch (error) {
+        console.error('Error fetching booked time slots:', error);
+        return [];
+    }
+}
+
 // Begin a realtime listener for bookings on the selected date
 async function startRealtimeBookedSlotsListener(dateString) {
     try {
@@ -649,6 +772,7 @@ async function generateTimeSlots(date) {
                 <div class="text-xs text-red-800 font-semibold mt-1">Day Blocked</div>
             </div>`;
         } else if (isPassed) {
+        if (isPassed) {
             // Time has already passed - mark as unavailable with red styling
             html += `<div class="${baseClasses} bg-red-50 text-red-400 border-red-300 cursor-not-allowed" data-time="${time}" title="This time already passed" onclick="selectTime('${time}')">
                 <div class="text-base font-extrabold">${time}</div>
@@ -690,6 +814,8 @@ function selectTime(time) {
         timeElement.title === 'This time slot is already booked' ||
         timeElement.title === 'This day is blocked') {
         // Show alert for passed times, booked slots, or blocked days
+        timeElement.title === 'This time slot is already booked') {
+        // Show alert for passed times or booked slots
         if (timeElement.title === 'This time already passed') {
             alert('This time already passed. Please select a future time slot.');
         } else if (timeElement.title === 'This time slot is already booked') {
@@ -1184,6 +1310,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (selectedPaymentMethodLabel) {
         selectedPaymentMethodLabel.textContent = PAYMENT_METHOD_LABELS[bookingData.paymentMethod] || bookingData.paymentMethod.toUpperCase();
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupQRCodeRealtimeListener();
+    updatePaymentQRCode();
+});
+
 });
 
 document.addEventListener('DOMContentLoaded', function() {
