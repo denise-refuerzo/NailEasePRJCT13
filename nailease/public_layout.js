@@ -30,14 +30,14 @@ const renderContentCard = (item, type) => {
     
     if (type === 'design') {
         // Design cards are optimized for the bottom row
-        cardBaseClasses += " aspect-[4/5] bg-pink-50/70";
+        cardBaseClasses += " aspect-[4/5] bg-pink-50/70 cursor-pointer";
         contentHtml = `
-            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-90">
-            <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex flex-col justify-end">
+            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-90 image-enlargeable" data-image-url="${escapeHtmlAttr(imageUrl)}">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex flex-col justify-end pointer-events-none">
                 <h4 class="text-white text-md font-bold">${title}</h4>
                 <p class="text-pink-300 text-sm font-semibold">₱${item.price.toFixed(2)}</p>
                 
-                <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors"
+                <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors pointer-events-auto"
                         data-design-id="${item.id}"
                         data-design-title="${escapeHtmlAttr(item.title || 'Design')}"
                         data-design-price="${item.price || 0}"
@@ -47,27 +47,27 @@ const renderContentCard = (item, type) => {
         `;
     } else if (type === 'promo') {
         // Promo cards are tall, but we use 'h-full' to ensure they don't stretch too tall
-        cardBaseClasses += " w-[220px] h-[300px] bg-pink-100/50"; 
+        cardBaseClasses += " w-[220px] h-[300px] bg-pink-100/50 cursor-pointer"; 
         contentHtml = `
-            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-80" 
+            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-80 image-enlargeable" data-image-url="${escapeHtmlAttr(imageUrl)}" 
                 onerror="this.onerror=null;this.src='${fallbackImage.replace('Image', title.replace(/\s/g, '+'))}';">
-            <div class="absolute inset-0 bg-pink-900/40 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-pink-900/40 flex items-center justify-center p-4 pointer-events-none">
                  <p class="text-white text-lg font-bold text-shadow">${title}</p>
             </div>
         `;
     } else if (type === 'credential') {
         // Credential cards are forced into a landscape aspect ratio (Aesthetic fix)
-        cardBaseClasses += " w-[350px] aspect-[4/3] bg-white shadow-lg"; 
+        cardBaseClasses += " w-[350px] aspect-[4/3] bg-white shadow-lg cursor-pointer"; 
         contentHtml = `
-            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-contain rounded-xl" 
+            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-contain rounded-xl image-enlargeable" data-image-url="${escapeHtmlAttr(imageUrl)}" 
                 onerror="this.onerror=null;this.src='${fallbackImage.replace('Image', 'Certificate')}';">
-            <div class="absolute inset-0 bg-black/10 flex items-end justify-start p-2">
+            <div class="absolute inset-0 bg-black/10 flex items-end justify-start p-2 pointer-events-none">
                  <p class="text-white text-xs font-bold">${title}</p>
             </div>
         `;
     }
 
-    return `<div class="${cardBaseClasses} public-card-${type}" data-id="${item.id}">${contentHtml}</div>`;
+    return `<div class="${cardBaseClasses} public-card-${type}" data-id="${item.id}" data-image-url="${escapeHtmlAttr(imageUrl)}">${contentHtml}</div>`;
 };
 
 const renderCarouselSection = (id, title, items, type) => {
@@ -195,6 +195,13 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
             <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
                 &copy; 2024 D'UR LASHNAILS BY DES. All rights reserved.
             </footer>
+            <!-- Image Modal/Lightbox -->
+            <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden flex items-center justify-center p-4">
+                <div class="relative max-w-7xl max-h-full">
+                    <button id="closeImageModal" class="absolute top-4 right-4 text-white text-4xl font-bold hover:text-pink-300 transition z-10 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center">×</button>
+                    <img id="modalImage" src="" alt="Enlarged image" class="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+                </div>
+            </div>
         </div>
     `;
 };
@@ -263,6 +270,7 @@ export const attachPublicPageListeners = () => {
     document.querySelectorAll('.book-design-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             const designTitle = encodeURIComponent(e.currentTarget.dataset.designTitle || 'Design');
             const designPrice = e.currentTarget.dataset.designPrice || '0';
             const designImage = encodeURIComponent(e.currentTarget.dataset.designImage || '');
@@ -272,4 +280,39 @@ export const attachPublicPageListeners = () => {
             window.location.href = `book.html?design=${designTitle}&price=${designPrice}&image=${designImage}&description=${designDescription}`;
         });
     });
+
+    // Image modal listeners
+    const modal = document.getElementById('imageModal');
+    const modalImage = document.getElementById('modalImage');
+    const closeBtn = document.getElementById('closeImageModal');
+    const clickableCards = document.querySelectorAll('.public-card-promo, .public-card-credential, .public-card-design');
+    const clickableImages = document.querySelectorAll('.image-enlargeable');
+
+    function openImageModal(url){
+        if (!modal || !modalImage || !url) return;
+        modalImage.src = url;
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeImageModal(){
+        if (!modal) return;
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+    clickableCards.forEach(card => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.book-design-btn')) return;
+            const url = card.dataset.imageUrl || card.querySelector('img')?.src;
+            if (url) openImageModal(url);
+        });
+    });
+    clickableImages.forEach(img => {
+        img.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const url = img.dataset.imageUrl || img.src;
+            if (url) openImageModal(url);
+        });
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closeImageModal);
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeImageModal(); });
 };

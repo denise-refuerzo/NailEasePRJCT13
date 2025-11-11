@@ -1,7 +1,7 @@
 // client_dashboard_template.js
 
 export const clientDashboardTemplate = `
-    <div class="min-h-screen bg-pink-50/50 overflow-x-hidden" style="width: 100vw; position: relative; left: 50%; transform: translateX(-50%);">        <header class="sticky top-0 bg-white shadow-lg z-50">
+        <header class="sticky top-0 bg-white shadow-lg z-50">
             <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
                 <a href="home.html" class="shadow-sm hover:shadow-md transition">
                     <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
@@ -48,35 +48,81 @@ export const clientDashboardTemplate = `
                 </div>
             </section>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <section class="history-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl">
-                    <div class="history-header mb-6 border-b pb-4 border-gray-100">
-                        <h2 class="history-title font-['Playfair_Display'] text-3xl font-bold text-pink-600">Appointment History</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <section class="history-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl">
+                <div class="history-header mb-6 border-b pb-4 border-gray-100">
+                    <h2 class="history-title font-['Playfair_Display'] text-3xl font-bold text-pink-600">Appointment History</h2>
+                </div>
+                <div class="appointments-grid" id="appointmentsGrid">
+                    <div class="empty-state text-center p-8 text-gray-500">
+                        <div class="empty-icon text-5xl mb-4 opacity-70">📅</div>
+                        <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Appointments Yet</h3>
+                        <p class="empty-description mb-6 leading-relaxed">Your future and past appointments will appear here once booked.</p>
+                        <a href="book.html" class="book-now-btn bg-gradient-to-r from-pink-500 to-red-400 text-white px-8 py-3 rounded-full font-bold inline-block transition transform hover:scale-105 shadow-xl shadow-pink-300/50" id="bookNowBtn">
+                            Book Now
+                        </a>
                     </div>
-                    <div class="appointments-grid">
-                        <div class="empty-state text-center p-8 text-gray-500">
-                            <div class="empty-icon text-5xl mb-4 opacity-70">📅</div>
-                            <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Appointments Yet</h3>
-                            <p class="empty-description mb-6 leading-relaxed">Your future and past appointments will appear here once booked.</p>
-                            <a href="#" class="book-now-btn bg-gradient-to-r from-pink-500 to-red-400 text-white px-8 py-3 rounded-full font-bold inline-block transition transform hover:scale-105 shadow-xl shadow-pink-300/50" id="bookNowBtn">
-                                Book Now
-                            </a>
-                        </div>
-                    </div>
-                </section>
+                </div>
+            </section>
 
-                <section class="reviews-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl">
-                    <div class="history-header mb-6 border-b pb-4 border-gray-100">
-                        <h2 class="history-title font-['Playfair_Display'] text-3xl font-bold text-pink-600">Your Reviews</h2>
+            <section class="reviews-section bg-white/95 rounded-2xl p-6 md:p-8 shadow-2xl">
+                <div class="history-header mb-6 border-b pb-4 border-gray-100">
+                    <h2 class="history-title font-['Playfair_Display'] text-3xl font-bold text-pink-600">Your Reviews</h2>
+                </div>
+                <div class="reviews-grid" id="reviewsGrid">
+                    <div class="empty-state text-center p-8 text-gray-500">
+                        <div class="empty-icon text-5xl mb-4 opacity-70">⭐</div>
+                        <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Reviews Yet</h3>
+                        <p class="empty-description mb-6 leading-relaxed">Once you've had an appointment, you can leave a review.</p>
                     </div>
-                    <div class="reviews-grid">
-                        <div class="empty-state text-center p-8 text-gray-500">
-                            <div class="empty-icon text-5xl mb-4 opacity-70">⭐</div>
-                            <h3 class="empty-title text-xl font-bold text-pink-700 mb-2">No Reviews Yet</h3>
-                            <p class="empty-description mb-6 leading-relaxed">Once you've had an appointment, you can leave a review.</p>
-                            <a href="#" class="submit-review-btn bg-gradient-to-r from-pink-500 to-red-400 text-white px-8 py-3 rounded-full font-bold inline-block transition transform hover:scale-105 shadow-xl shadow-pink-300/50">
-                                View Bookings
-                            </a>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Review Submission Modal -->
+    <div class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-300 opacity-0 pointer-events-none hidden" id="reviewModal">
+        <div class="modal-card bg-white rounded-2xl p-8 max-w-2xl w-full relative transform scale-95 transition-transform duration-300 shadow-3xl max-h-[90vh] overflow-y-auto">
+            <button class="modal-close absolute top-4 right-5 text-gray-600 text-3xl hover:text-pink-600 transition" id="closeReviewModal">&times;</button>
+            <h2 class="modal-title text-2xl font-bold text-gray-700 mb-6 text-center">Leave a Review</h2>
+            
+            <form id="reviewForm">
+                <input type="hidden" id="reviewAppointmentId" />
+                
+                <!-- Star Rating -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Rating</label>
+                    <div class="flex gap-2" id="starRating">
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="1">⭐</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="2">⭐</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="3">⭐</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="4">⭐</button>
+                        <button type="button" class="star-btn text-4xl text-gray-300 hover:text-yellow-400 transition" data-rating="5">⭐</button>
+                    </div>
+                    <input type="hidden" id="reviewRating" required />
+                </div>
+                
+                <!-- Review Text -->
+                <div class="mb-6">
+                    <label for="reviewText" class="block text-sm font-medium text-gray-700 mb-2">Your Review</label>
+                    <textarea id="reviewText" rows="5" class="w-full p-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-pink-500 transition" placeholder="Share your experience..." required></textarea>
+                </div>
+                
+                <!-- Image Upload (Max 2) -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Photos (Optional, Max 2)</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="image-upload-container border-2 border-dashed border-pink-300 rounded-xl p-4 text-center cursor-pointer hover:bg-pink-50 transition" id="imageUpload1">
+                            <input type="file" accept="image/*" class="hidden" id="reviewImage1" />
+                            <div class="text-3xl mb-2">📷</div>
+                            <div class="text-sm text-gray-600">Click to upload</div>
+                            <img id="previewImage1" class="hidden mt-2 max-h-32 w-full object-cover rounded" />
+                        </div>
+                        <div class="image-upload-container border-2 border-dashed border-pink-300 rounded-xl p-4 text-center cursor-pointer hover:bg-pink-50 transition" id="imageUpload2">
+                            <input type="file" accept="image/*" class="hidden" id="reviewImage2" />
+                            <div class="text-3xl mb-2">📷</div>
+                            <div class="text-sm text-gray-600">Click to upload</div>
+                            <img id="previewImage2" class="hidden mt-2 max-h-32 w-full object-cover rounded" />
                         </div>
                     </div>
                 </section>

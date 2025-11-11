@@ -131,19 +131,19 @@ const renderDesignCard = (item) => {
     const title = item.title; 
     const price = item.price; 
     
-    let cardBaseClasses = "rounded-xl shadow-2xl flex-shrink-0 relative overflow-hidden transition-all duration-300 transform hover:scale-[1.03]";
+    let cardBaseClasses = "rounded-xl shadow-2xl flex-shrink-0 relative overflow-hidden transition-all duration-300 transform hover:scale-[1.03] cursor-pointer design-card";
 
     return `
-        <div class="${cardBaseClasses} aspect-[4/5] bg-pink-50/70" data-id="${item.id}">
-            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-90" 
+        <div class="${cardBaseClasses} aspect-[4/5] bg-pink-50/70" data-id="${item.id}" data-image-url="${imageUrl}">
+            <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-90 image-enlargeable" data-image-url="${imageUrl}" 
                  crossorigin="anonymous"
                  referrerpolicy="no-referrer"
                  onerror="this.onerror=null;this.src='${fallbackImage.replace('No+Image', title.replace(/\s/g, '+'))}';">
-            <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex flex-col justify-end">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex flex-col justify-end pointer-events-none">
                 <h4 class="text-white text-md font-bold truncate">${title}</h4>
                 <p class="text-pink-300 text-sm font-semibold">₱${price.toFixed(2)}</p>
                 
-                <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors"
+                <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors pointer-events-auto"
                         data-design-id="${item.id}">Book Now</button>
             </div>
         </div>
@@ -178,18 +178,18 @@ const renderDesignGrid = (page) => {
         
         // Each card will have a fixed width for clean alignment
         return `
-            <div class="rounded-xl shadow-2xl relative overflow-hidden transition-all duration-300 transform hover:scale-[1.03]"
+            <div class="rounded-xl shadow-2xl relative overflow-hidden transition-all duration-300 transform hover:scale-[1.03] cursor-pointer design-card"
                  style="width: 220px; height: 320px; background-color: #fdebf4;"
-                 data-id="${item.id}">
+                 data-id="${item.id}" data-image-url="${imageUrl}">
                 <img src="${imageUrl}" alt="${title}" 
-                     class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-90"
+                     class="w-full h-full object-cover rounded-xl absolute inset-0 opacity-90 image-enlargeable" data-image-url="${imageUrl}"
                      crossorigin="anonymous"
                      referrerpolicy="no-referrer"
                      onerror="this.onerror=null;this.src='${fallbackImage.replace('No+Image', title.replace(/\s/g, '+'))}';">
-                <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex flex-col justify-end">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex flex-col justify-end pointer-events-none">
                     <h4 class="text-white text-md font-bold truncate">${title}</h4>
                     <p class="text-pink-300 text-sm font-semibold">₱${price.toFixed(2)}</p>
-                    <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors"
+                    <button class="book-design-btn mt-2 bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition-colors pointer-events-auto"
                             data-design-id="${item.id}">Book Now</button>
                 </div>
             </div>
@@ -258,6 +258,7 @@ const attachDesignCardListeners = () => {
     document.querySelectorAll('.book-design-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             const designId = e.currentTarget.dataset.designId;
             
             // Find the design data from designData array
@@ -281,6 +282,19 @@ const attachDesignCardListeners = () => {
             }
         });
     });
+
+    // Image enlarge listeners
+    const modalEl = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImage');
+    const closeBtn = document.getElementById('closeImageModal');
+    const cards = document.querySelectorAll('.design-card');
+    const imgs = document.querySelectorAll('.image-enlargeable');
+    function openImageModal(url){ if (!modalEl || !modalImg || !url) return; modalImg.src = url; modalEl.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+    function closeImageModal(){ if (!modalEl) return; modalEl.classList.add('hidden'); document.body.style.overflow=''; }
+    cards.forEach(card => { card.addEventListener('click', (e)=>{ if (e.target.closest('.book-design-btn')) return; const url = card.dataset.imageUrl || card.querySelector('img')?.src; if (url) openImageModal(url); }); });
+    imgs.forEach(img => { img.addEventListener('click', (e)=>{ e.stopPropagation(); const url = img.dataset.imageUrl || img.src; if (url) openImageModal(url); }); });
+    if (closeBtn) closeBtn.addEventListener('click', closeImageModal);
+    if (modalEl) modalEl.addEventListener('click', (e)=>{ if (e.target === modalEl) closeImageModal(); });
 };
 
 const attachPaginationListeners = (totalPages) => {
@@ -400,7 +414,14 @@ const renderPortfolioPage = () => {
             <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
                 &copy; 2024 DCAC. All rights reserved.
             </footer>
-        </div>
+            <!-- Image Modal/Lightbox -->
+            <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden flex items-center justify-center p-4">
+                <div class="relative max-w-7xl max-h-full">
+                    <button id="closeImageModal" class="absolute top-4 right-4 text-white text-4xl font-bold hover:text-pink-300 transition z-10 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center">×</button>
+                    <img id="modalImage" src="" alt="Enlarged design image" class="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+                </div>
+            </div>
+        </div>
     `;
 
     appContent.innerHTML = pageHtml;

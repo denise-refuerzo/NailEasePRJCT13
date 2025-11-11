@@ -48,10 +48,10 @@ let currentStep = 1;
 let bookingData = {
     design: {
         id: null,
-        name: 'Clean & Modern',
-        price: 299,
-        image: 'Clean & Modern',
-        description: 'Minimalist logo design with modern aesthetics'
+        name: null,
+        price: null,
+        image: null,
+        description: null
     },
     selectedDate: null,
     selectedTime: null,
@@ -63,6 +63,20 @@ let bookingData = {
     otpVerified: false
 };
 
+// Helper to normalize possible Drive/Sheets links to direct image
+function convertToDirectImageUrl(url) {
+    if (!url) return '';
+    if (/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(url)) return url;
+    if (url.includes('drive.google.com')) {
+        const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (m && m[1]) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    }
+    if (url.includes('googleusercontent.com')) {
+        try { return new URL(url).toString(); } catch { return url; }
+    }
+    return url;
+}
+
 // Initialize booking data from URL parameters
 function initializeFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -73,20 +87,39 @@ function initializeFromURL() {
 
     if (designName) {
         bookingData.design.name = decodeURIComponent(designName);
-        bookingData.design.price = parseFloat(designPrice) || 299;
-        bookingData.design.image = decodeURIComponent(designImage) || 'Design';
+        bookingData.design.price = parseFloat(designPrice) || 0;
+        bookingData.design.image = decodeURIComponent(designImage) || '';
         bookingData.design.description = decodeURIComponent(designDescription) || 'Professional design service';
-        
-        updateSelectedDesign();
     }
+    updateSelectedDesign();
 }
 
 // Update selected design display
 function updateSelectedDesign() {
-    document.getElementById('selectedDesignName').textContent = bookingData.design.name;
-    document.getElementById('selectedDesignPrice').textContent = `₱${bookingData.design.price.toFixed(2)}`;
-    document.getElementById('selectedDesignImage').textContent = bookingData.design.image;
-    document.getElementById('selectedDesignDescription').textContent = bookingData.design.description;
+    const nameEl = document.getElementById('selectedDesignName');
+    const priceEl = document.getElementById('selectedDesignPrice');
+    const imgEl = document.getElementById('selectedDesignImage');
+    const descEl = document.getElementById('selectedDesignDescription');
+    const chooseEl = document.getElementById('chooseDesignContainer');
+    const selectedEl = document.getElementById('selectedDesignContainer');
+
+    const hasDesign = !!(bookingData.design && bookingData.design.name && bookingData.design.image);
+
+    if (hasDesign) {
+        if (chooseEl) chooseEl.style.display = 'none';
+        if (selectedEl) selectedEl.style.display = 'block';
+        if (nameEl) nameEl.textContent = bookingData.design.name;
+        if (priceEl) priceEl.textContent = `₱${(bookingData.design.price || 0).toFixed(2)}`;
+        if (descEl) descEl.textContent = bookingData.design.description || '';
+        if (imgEl) {
+            const url = convertToDirectImageUrl(bookingData.design.image);
+            imgEl.src = url || 'https://placehold.co/400x300/FCE7F3/DB2777?text=Design+Image';
+            imgEl.dataset.imageUrl = imgEl.src;
+        }
+    } else {
+        if (selectedEl) selectedEl.style.display = 'none';
+        if (chooseEl) chooseEl.style.display = 'block';
+    }
 }
 
 // Change design - redirect to design portfolio
@@ -819,6 +852,10 @@ function previousStep() {
 function validateCurrentStep() {
     switch (currentStep) {
         case 1:
+            if (!bookingData.design || !bookingData.design.name || !bookingData.design.image) {
+                alert('Please choose a design before proceeding.');
+                return false;
+            }
             return true;
         case 2:
             if (!bookingData.selectedDate) {
@@ -1521,6 +1558,25 @@ Thank you for choosing DCAC Design Studio!
 
 window.downloadBookingDetails = downloadBookingDetails; // Expose globally for onclick attribute
 
+// Open/close image modal for selected design
+function openDesignImageModal() {
+    const modal = document.getElementById('imageModal');
+    const modalImage = document.getElementById('modalImage');
+    const imgEl = document.getElementById('selectedDesignImage');
+    if (!modal || !modalImage || !imgEl) return;
+    const url = imgEl.dataset.imageUrl || imgEl.src;
+    if (!url) return;
+    modalImage.src = url;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
 // --- INITIALIZATION ---
 let autoAdvanceTriggered = false; 
 
@@ -1535,6 +1591,14 @@ window.resendOTP = resendOTP;
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize calendar and steps immediately (before auth check)
     initializeFromURL();
+    // Ensure UI reflects design state on load
+    updateSelectedDesign();
+
+    const closeBtn = document.getElementById('closeImageModal');
+    const modal = document.getElementById('imageModal');
+    if (closeBtn) closeBtn.addEventListener('click', closeImageModal);
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeImageModal(); });
+
     generateCalendar();
     showStep(currentStep);
     
@@ -1645,4 +1709,3 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     }
 });
-

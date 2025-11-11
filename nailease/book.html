@@ -339,14 +339,27 @@
 
             <!-- Step 1: Design Selection -->
             <div class="step-content active bg-white rounded-3xl shadow-xl p-6 md:p-10 mb-6" id="step1">
-                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Selected Design</h2>
+                <h2 class="text-2xl font-bold text-pink-600 text-center mb-6">Select Your Design</h2>
                 <div class="border-3 border-pink-500 rounded-2xl p-6 text-center bg-gradient-to-br from-pink-50 to-pink-100">
-                    <div class="w-full h-40 bg-gray-100 rounded-xl flex items-center justify-center text-lg font-semibold text-gray-600 mb-4" id="selectedDesignImage">Clean & Modern</div>
-                    <div>
-                        <h3 class="text-xl font-bold text-pink-600 mb-2" id="selectedDesignName">Clean & Modern</h3>
-                        <div class="text-3xl font-bold text-green-600 mb-2" id="selectedDesignPrice">₱299</div>
-                        <p class="text-gray-600 mb-4" id="selectedDesignDescription">Minimalist logo design with modern aesthetics</p>
-                        <button class="bg-pink-50 border-2 border-pink-500 text-pink-600 px-6 py-2 rounded-full font-bold hover:bg-pink-500 hover:text-white transition-all" onclick="changeDesign()">Change Design</button>
+                    <!-- Choose Design state -->
+                    <div id="chooseDesignContainer" class="py-10">
+                        <div class="text-6xl mb-4">💅</div>
+                        <h3 class="text-2xl font-bold text-pink-600 mb-2">No Design Selected</h3>
+                        <p class="text-gray-600 mb-6">Choose a design from our portfolio to get started.</p>
+                        <button class="bg-gradient-to-r from-pink-500 to-pink-400 hover:from-pink-600 hover:to-pink-500 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg" onclick="changeDesign()">Choose Design</button>
+                    </div>
+
+                    <!-- Selected Design state -->
+                    <div id="selectedDesignContainer" style="display:none;">
+                        <div class="w-full h-64 bg-gray-100 rounded-xl mb-4 overflow-hidden flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity" onclick="openDesignImageModal()">
+                            <img id="selectedDesignImage" src="" alt="Selected design" class="w-full h-full object-cover rounded-xl">
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-pink-600 mb-2" id="selectedDesignName"></h3>
+                            <div class="text-3xl font-bold text-green-600 mb-2" id="selectedDesignPrice"></div>
+                            <p class="text-gray-600 mb-4" id="selectedDesignDescription"></p>
+                            <button class="bg-pink-50 border-2 border-pink-500 text-pink-600 px-6 py-2 rounded-full font-bold hover:bg-pink-500 hover:text-white transition-all" onclick="changeDesign()">Change Design</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -660,6 +673,14 @@
                 <button class="bg-gradient-to-r from-pink-500 to-pink-400 hover:from-pink-600 hover:to-pink-500 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg" id="nextBtn" onclick="nextStep()">Next</button>
             </div>
         </main>
+    </div>
+
+    <!-- Image Modal/Lightbox for selected design -->
+    <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden flex items-center justify-center p-4">
+        <div class="relative max-w-7xl max-h-full">
+            <button id="closeImageModal" class="absolute top-4 right-4 text-white text-4xl font-bold hover:text-pink-300 transition z-10 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center">×</button>
+            <img id="modalImage" src="" alt="Enlarged design image" class="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+        </div>
     </div>
 
     <script src="google-calendar.js?v=2"></script>
