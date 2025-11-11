@@ -1,3 +1,8 @@
+// Blocked days functionality
+const APP_ID_BLOCKED = 'nailease25-iapt';
+const BLOCKED_DAYS_COLLECTION = `artifacts/${APP_ID_BLOCKED}/blockedDays`;
+let blockedDaysCache = new Set();
+
 function formatDateString(date) {
     if (!date) return '';
     const d = date instanceof Date ? date : new Date(date);
@@ -5,6 +10,176 @@ function formatDateString(date) {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+/**
+ * Check if a date is blocked
+ */
+async function isDayBlocked(dateString) {
+    if (blockedDaysCache.has(dateString)) {
+        return true;
+    }
+    
+    try {
+        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        let app;
+        try {
+            app = getApp();
+        } catch (e) {
+            app = initializeApp(firebaseConfig);
+        }
+        
+        const db = getFirestore(app);
+        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
+        const blockedDaySnap = await getDoc(blockedDayRef);
+        
+        if (blockedDaySnap.exists()) {
+            const data = blockedDaySnap.data();
+            if (data.blocked === true) {
+                blockedDaysCache.add(dateString);
+                return true;
+            }
+        }
+    } catch (error) {
+        console.error('Error checking blocked day:', error);
+    }
+    
+    return false;
+}
+
+/**
+ * Block a day in Firestore
+ */
+async function blockDay(dateString) {
+    try {
+        const { getFirestore, doc, setDoc, Timestamp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        let app;
+        try {
+            app = getApp();
+        } catch (e) {
+            app = initializeApp(firebaseConfig);
+        }
+        
+        const db = getFirestore(app);
+        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
+        
+        await setDoc(blockedDayRef, {
+            date: dateString,
+            blocked: true,
+            blockedAt: Timestamp.now(),
+            updatedAt: Timestamp.now()
+        }, { merge: true });
+        
+        blockedDaysCache.add(dateString);
+        return true;
+    } catch (error) {
+        console.error('Error blocking day:', error);
+        throw error;
+    }
+}
+
+/**
+ * Unblock a day in Firestore
+ */
+async function unblockDay(dateString) {
+    try {
+        const { getFirestore, doc, deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        let app;
+        try {
+            app = getApp();
+        } catch (e) {
+            app = initializeApp(firebaseConfig);
+        }
+        
+        const db = getFirestore(app);
+        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
+        
+        await deleteDoc(blockedDayRef);
+        blockedDaysCache.delete(dateString);
+        return true;
+    } catch (error) {
+        console.error('Error unblocking day:', error);
+        throw error;
+    }
+}
+
+/**
+ * Initialize blocked days cache
+ */
+async function initializeBlockedDaysCache() {
+    try {
+        const { getFirestore, collection, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        let app;
+        try {
+            app = getApp();
+        } catch (e) {
+            app = initializeApp(firebaseConfig);
+        }
+        
+        const db = getFirestore(app);
+        const blockedDaysRef = collection(db, BLOCKED_DAYS_COLLECTION);
+        const snapshot = await getDocs(blockedDaysRef);
+        
+        blockedDaysCache.clear();
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.blocked === true) {
+                blockedDaysCache.add(doc.id);
+            } else if (data.date && data.blocked === true) {
+                blockedDaysCache.add(data.date);
+            }
+        });
+    } catch (error) {
+        console.error('Error initializing blocked days cache:', error);
+    }
 }
 
 /**
@@ -17,6 +192,10 @@ function getAppointmentsForDate(appointments, dateString) {
 /**
  * Render calendar view with appointments
  */
+export async function renderAppointmentCalendar(appointments, currentMonth = new Date()) {
+    // Initialize blocked days cache
+    await initializeBlockedDaysCache();
+    
 export function renderAppointmentCalendar(appointments, currentMonth = new Date()) {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -75,6 +254,7 @@ export function renderAppointmentCalendar(appointments, currentMonth = new Date(
         const dateObj = new Date(year, month, day);
         const isToday = dateObj.getTime() === today.getTime();
         const isPast = dateObj < today;
+        const dayIsBlocked = blockedDaysCache.has(dateString);
         
         const dayAppointments = getAppointmentsForDate(appointments, dateString);
         const pendingCount = dayAppointments.filter(apt => apt.status === 'pending').length;
@@ -89,6 +269,9 @@ export function renderAppointmentCalendar(appointments, currentMonth = new Date(
         });
         
         let dayClasses = 'aspect-square bg-white border-2 rounded-lg p-2 overflow-y-auto hover:shadow-md transition-all cursor-pointer';
+        if (dayIsBlocked) {
+            dayClasses += ' border-red-500 bg-red-50';
+        } else if (isToday) {
         if (isToday) {
             dayClasses += ' border-pink-500 bg-pink-50';
         } else if (isPast) {
@@ -98,6 +281,15 @@ export function renderAppointmentCalendar(appointments, currentMonth = new Date(
         }
         
         calendarHtml += `
+            <div class="${dayClasses}" data-date="${dateString}" data-day="${day}" data-blocked="${dayIsBlocked}">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-bold ${isToday && !dayIsBlocked ? 'text-pink-600' : dayIsBlocked ? 'text-red-600 line-through' : 'text-gray-700'}">${day}</span>
+                    ${isToday && !dayIsBlocked ? '<span class="text-xs text-pink-600 font-semibold bg-pink-200 px-1.5 py-0.5 rounded">Today</span>' : ''}
+                    ${dayIsBlocked ? '<span class="text-xs text-red-600 font-semibold bg-red-200 px-1.5 py-0.5 rounded">Blocked</span>' : ''}
+                </div>
+                <div class="space-y-1 flex flex-col items-center justify-center h-full">
+                    ${!isPast ? `
+                        <button class="w-full text-xs ${dayIsBlocked ? 'bg-red-100 text-red-700' : 'bg-pink-100 text-pink-700'} px-1.5 py-1 rounded font-semibold hover:${dayIsBlocked ? 'bg-red-200' : 'bg-pink-200'} transition" 
             <div class="${dayClasses}" data-date="${dateString}" data-day="${day}">
                 <div class="flex items-center justify-between mb-1">
                     <span class="text-sm font-bold ${isToday ? 'text-pink-600' : 'text-gray-700'}">${day}</span>
@@ -131,6 +323,10 @@ export function renderAppointmentCalendar(appointments, currentMonth = new Date(
                     <div class="flex items-center gap-2">
                         <div class="w-4 h-4 bg-pink-500 rounded"></div>
                         <span class="text-gray-600">Today</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 bg-red-200 border-2 border-red-400 rounded"></div>
+                        <span class="text-gray-600">Blocked</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="w-4 h-4 bg-amber-100 border-2 border-amber-300 rounded"></div>
@@ -246,6 +442,9 @@ function formatTimeTo12Hour(time24) {
  * Returns time slots with availability status
  */
 export async function getAvailableTimeSlots(dateString, appointments) {
+    // Check if day is blocked first
+    const dayIsBlocked = await isDayBlocked(dateString);
+    
     // Get time slots based on day of week - SAME LOGIC AS USER BOOKING SYSTEM
     const [year, month, day] = dateString.split('-').map(Number);
     const dateObj = new Date(year, month - 1, day);
@@ -285,6 +484,37 @@ export async function getAvailableTimeSlots(dateString, appointments) {
     today.setHours(0, 0, 0, 0);
     const isToday = dateObj.getTime() === today.getTime();
     
+    return {
+        dayIsBlocked,
+        timeSlots: allTimeSlots.map(time => {
+            // Normalize time for comparison
+            const normalizedTime = normalizeTime(time);
+            const isBooked = bookedTimes.includes(normalizedTime) || bookedTimes.includes(time);
+            let isPassed = false;
+            
+            if (isToday) {
+                isPassed = isTimePassed(dateString, time);
+            }
+            
+            // If day is blocked, all slots are unavailable
+            const available = !dayIsBlocked && !isBooked && !isPassed;
+            
+            // Find the appointment that matches this time slot
+            const matchingAppointment = dayAppointments.find(apt => {
+                const aptTime = normalizeTime(apt.selectedTime);
+                return aptTime === normalizedTime || aptTime === time;
+            });
+            
+            return {
+                time,
+                available,
+                booked: isBooked,
+                passed: isPassed,
+                blocked: dayIsBlocked,
+                appointment: matchingAppointment || null
+            };
+        })
+    };
     return allTimeSlots.map(time => {
         // Normalize time for comparison
         const normalizedTime = normalizeTime(time);
@@ -352,6 +582,9 @@ function isTimePassed(dateString, timeString) {
  * Show time slots modal for a selected date
  */
 export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn) {
+    const timeSlotsData = await getAvailableTimeSlots(dateString, appointments);
+    const dayIsBlocked = timeSlotsData.dayIsBlocked;
+    const timeSlots = timeSlotsData.timeSlots;
     const timeSlots = await getAvailableTimeSlots(dateString, appointments);
     
     // Format date for display
@@ -391,6 +624,15 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
     });
     
     let timeSlotsHtml = timeSlots.map(slot => {
+        // If day is blocked, show all slots as blocked
+        if (dayIsBlocked || slot.blocked) {
+            return `
+                <div class="px-4 py-3 border-2 border-red-400 rounded-xl text-center font-bold bg-red-100 text-red-700 cursor-not-allowed">
+                    <div class="text-base font-extrabold">${slot.time}</div>
+                    <div class="text-xs text-red-800 font-semibold mt-1">Day Blocked</div>
+                </div>
+            `;
+        } else if (slot.passed) {
         if (slot.passed) {
             return `
                 <div class="px-4 py-3 border-2 border-red-300 rounded-xl text-center font-bold bg-red-50 text-red-400 cursor-not-allowed">
@@ -463,6 +705,37 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
         `;
     }
     
+    // Check if date is in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isPast = dateObj < today;
+    
+    // Block/Unblock button HTML (only show for future dates)
+    const blockUnblockHtml = !isPast ? `
+        <div class="bg-gray-50 rounded-lg p-4 mb-4 border-2 ${dayIsBlocked ? 'border-red-300 bg-red-50' : 'border-gray-200'}">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h5 class="text-sm font-bold text-gray-800 mb-1">${dayIsBlocked ? 'Day is Blocked' : 'Day is Available'}</h5>
+                    <p class="text-xs text-gray-600">${dayIsBlocked ? 'This day is currently blocked. All time slots are unavailable for booking.' : 'You can block this day to prevent all bookings.'}</p>
+                </div>
+                <button id="blockUnblockBtn" onclick="handleBlockUnblockDay('${dateString}', ${dayIsBlocked})" 
+                        class="px-4 py-2 text-sm font-semibold rounded-lg transition ${dayIsBlocked ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-600 text-white hover:bg-red-700'}">
+                    ${dayIsBlocked ? 'Unblock Day' : 'Block Day'}
+                </button>
+            </div>
+        </div>
+    ` : '';
+    
+    const modalHtml = `
+        <div id="timeSlotsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div class="sticky top-0 bg-gradient-to-r ${dayIsBlocked ? 'from-red-500 to-red-600' : 'from-pink-500 to-pink-600'} text-white p-6 rounded-t-2xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-2xl font-bold">${dayIsBlocked ? 'Blocked Day - Time Slots' : 'Available Time Slots'}</h3>
+                            <p class="${dayIsBlocked ? 'text-red-100' : 'text-pink-100'} mt-1">${formattedDate}</p>
+                        </div>
+                        <button onclick="closeTimeSlotsModal()" class="text-white hover:${dayIsBlocked ? 'text-red-200' : 'text-pink-200'} transition">
     const modalHtml = `
         <div id="timeSlotsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -480,6 +753,11 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
                     </div>
                 </div>
                 <div class="p-6">
+                    ${dayIsBlocked ? `
+                        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <p class="text-sm text-red-800 font-semibold">⚠️ This day is blocked. All time slots are unavailable for booking.</p>
+                        </div>
+                    ` : ''}
                     ${bookingsListHtml}
                     <div class="mb-4">
                         <h4 class="text-sm font-bold text-gray-700 mb-2">All Time Slots for ${formattedDate}:</h4>
@@ -488,6 +766,7 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                         ${timeSlotsHtml}
                     </div>
+                    ${blockUnblockHtml}
                     <div class="bg-gray-50 rounded-lg p-4 mb-4">
                         <p class="text-xs text-gray-600 text-center">
                             <strong>Note:</strong> To book a walk-in appointment, please use the "Walk-in" tab in the Appointments section.
@@ -497,6 +776,10 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
                         <div class="flex items-center gap-2">
                             <div class="w-4 h-4 bg-green-50 border-2 border-green-500 rounded"></div>
                             <span>Available</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 bg-red-100 border-2 border-red-400 rounded"></div>
+                            <span>Blocked</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="w-4 h-4 bg-emerald-50 border-2 border-emerald-300 rounded"></div>
@@ -529,6 +812,89 @@ export async function showTimeSlotsModal(dateString, appointments, onBookWalkIn)
     window.closeTimeSlotsModal = function() {
         const modal = document.getElementById('timeSlotsModal');
         if (modal) modal.remove();
+    };
+    
+    // Handle block/unblock day functionality
+    window.handleBlockUnblockDay = async function(dateString, currentlyBlocked) {
+        try {
+            const button = document.getElementById('blockUnblockBtn');
+            if (button) {
+                button.disabled = true;
+                button.textContent = currentlyBlocked ? 'Unblocking...' : 'Blocking...';
+            }
+            
+            if (currentlyBlocked) {
+                // Unblock the day
+                await unblockDay(dateString);
+                
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Day Unblocked',
+                        text: 'This day is now available for booking.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }
+            } else {
+                // Block the day
+                await blockDay(dateString);
+                
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Day Blocked',
+                        text: 'This day is now blocked. All time slots are unavailable for booking.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }
+            }
+            
+            // Refresh the cache
+            await initializeBlockedDaysCache();
+            
+            // Close the modal first
+            window.closeTimeSlotsModal();
+            
+            // Refresh the calendar view
+            if (window.refreshCalendarView) {
+                await window.refreshCalendarView();
+                // Re-open the modal with updated data after calendar refreshes
+                setTimeout(async () => {
+                    if (window.showTimeSlots) {
+                        await window.showTimeSlots(dateString);
+                    }
+                }, 300);
+            } else {
+                // Fallback: reload the page section
+                const calendarContainer = document.getElementById('firestore-calendar-container');
+                if (calendarContainer && window.showTimeSlots) {
+                    // Wait a bit for the calendar to refresh, then show modal again
+                    setTimeout(async () => {
+                        await window.showTimeSlots(dateString);
+                    }, 500);
+                }
+            }
+        } catch (error) {
+            console.error('Error blocking/unblocking day:', error);
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to update day status. Please try again.',
+                    confirmButtonText: 'OK'
+                });
+            } else {
+                alert('Failed to update day status. Please try again.');
+            }
+            
+            const button = document.getElementById('blockUnblockBtn');
+            if (button) {
+                button.disabled = false;
+                button.textContent = currentlyBlocked ? 'Unblock Day' : 'Block Day';
+            }
+        }
     };
     
     // Note: Available slots are no longer clickable - users must use Walk-in tab to book
