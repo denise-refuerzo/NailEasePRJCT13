@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Firebase Google Sign-In</title>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -43,6 +44,10 @@
         </div>
     </div>
 
+    <script>
+        window.__NAILEASE_CALENDAR_EMBED_URL__ = 'https://calendar.google.com/calendar/embed?src=naileaseph%40gmail.com&ctz=Asia%2FManila';
+    </script>
+    <script src="./google-calendar.js"></script>
     <script type="module" src="./auth-logic.js"></script>
     <script type="module">
         import { startAuthFlow } from './auth-logic.js';

@@ -1,10 +1,35 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    // Allow users (authenticated or unauthenticated) to upload receipts
+    match /receipts/{receiptId} {
+      // Allow write (upload) with security restrictions
+      allow write: if request.resource.size < 5 * 1024 * 1024  // Max 5MB
+                   && request.resource.contentType.matches('image/.*');  // Only images
+      
+      // Allow read access (authenticated users can read, or make it public if needed)
+      allow read: if true;  // Allow anyone to read receipts (or change to request.auth != null for authenticated only)
+    }
+    
+    // Allow authenticated users to upload review images
+    match /reviews/{reviewId}/{imageId} {
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow read: if true;
+    }
+    
+    // Allow admin to upload external review photos (with nested path structure)
+    match /external-reviews/{allPaths=**} {
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow read: if true;
+      allow delete: if request.auth != null;
+    }
+    
+    // Deny all other paths by default
     match /{allPaths=**} {
       allow read, write: if false;
     }
