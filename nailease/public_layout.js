@@ -94,7 +94,7 @@ const renderTopPicks = (items) => {
 
     return `
         <div class="w-full pt-6">
-            <h2 class="${titleClasses}">Top Picks !!!</h2>
+            <h2 class="${titleClasses}">Signature Styles</h2>
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 ${cardsHtml.length > 0 ? cardsHtml : '<div class="lg:col-span-5 text-center text-gray-500 py-8">No designs marked as Top Picks or available.</div>'}
             </div>
@@ -123,7 +123,9 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
         <div class="min-h-screen bg-pink-50/50">
             <header class="sticky top-0 bg-white shadow-lg z-50">
                 <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                    <a href="home.html" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
+                    <a href="home.html" class="shadow-sm hover:shadow-md transition">
+                        <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
+                    </a>
                     
                     <nav class="flex space-x-4 items-center">
                         <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150 font-medium">Home</a>
@@ -139,7 +141,7 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
             
             <main class="max-w-7xl mx-auto p-4 md:p-8">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    ${renderCarouselSection('promo-carousel', 'Promo!!!', activePromos, 'promo')}
+                    ${renderCarouselSection('promo-carousel', 'Studio Updates', activePromos, 'promo')}
                     ${renderCarouselSection('credential-carousel', 'Credentials', credentials, 'credential')}
                 </div>
                 
@@ -147,7 +149,7 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
             </main>
 
             <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
-                &copy; 2024 DCAC. All rights reserved.
+                &copy; 2024 D'UR LASHNAILS BY DES. All rights reserved.
             </footer>
         </div>
     `;

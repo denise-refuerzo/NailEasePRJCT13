@@ -403,29 +403,33 @@ export function renderAdminLayout(container, user) {
     const avatarLetter = adminName.charAt(0).toUpperCase();
 
     const adminHTML = `
-       <header class="sticky top-0 bg-white shadow-md z-50">
-            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
-                <a href="#" class="text-xl font-bold text-pink-600 tracking-wider cursor-pointer">DCAC</a>
-                
-                <div class="hidden sm:flex space-x-4 items-center">
-                                        <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
-                    
-                    <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
-                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
-                    
-                                        <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
-                    
-                    <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
-                </div>
-            </div>
-        </header>
+    <div class="min-h-screen bg-pink-50/50">
+        <div class="min-h-screen bg-pink-50/50 overflow-x-hidden" style="width: 100vw; position: relative; left: 50%; transform: translateX(-50%);">
+        <header class="sticky top-0 bg-white shadow-lg z-50">
+            <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <a href="home.html" class="shadow-sm hover:shadow-md transition">
+                    <img src="logo.png" alt="D'UR LASHNAILS BY DES" class="h-16 shadow-sm">
+                </a>
+
+                <div class="hidden sm:flex space-x-4 items-center">
+                    <a href="homepage.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Home</a>
+                        
+                    <a href="/portfolio.html" class="text-gray-600 hover:text-pink-600 transition duration-150">Design Portfolio</a>
+                    <a href="#" class="text-gray-600 hover:text-pink-600 transition duration-150">Reports</a>
+
+                        <a href="index.html" class="text-pink-600 border border-pink-600 px-3 py-1 rounded-lg hover:bg-pink-50 transition duration-150">My Dashboard</a> 
+
+                    <button id="logoutBtn" class="text-gray-600 hover:text-pink-600 transition duration-150">Log Out</button>
+                </div>
+            </div>
+        </header>
 
         <div class="text-center py-8 bg-white border-b border-gray-100">
             <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800">Admin Dashboard</h1>
             <p class="text-sm text-gray-500 mt-1">Manage operations, clients, and content</p>
         </div>
         
-        <div class="w-full p-4 md:p-8"> 
+        <div class="max-w-7xl mx-auto w-full p-4 md:p-8"> 
             <div class="w-full px-0 mx-0">
                 <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8 mb-8 border border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -535,8 +539,8 @@ export function renderAdminLayout(container, user) {
             </div>
         </div>
        ${adminProfileModalHtml}
-      
-    `;
+    </div>
+`;
     
     container.innerHTML = adminHTML;
     

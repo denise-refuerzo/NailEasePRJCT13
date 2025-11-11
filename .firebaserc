@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "nailease25"
+    "default": "nailease25",
+    "stagingg": "nailease25"
   },
   "targets": {},
   "etags": {
