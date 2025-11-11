@@ -4,6 +4,45 @@
 // The HTML sets window.auth, window.db, etc. from auth-logic.js
 // We'll access them after they're available
 
+// Firebase Storage setup (will be initialized when available)
+let storage = null;
+let storageInitialized = false;
+
+const APP_ID = 'nailease25-iapt';
+const QR_COLLECTION_PATH = `content/${APP_ID}/qrCodes`;
+const PAYMENT_METHOD_LABELS = {
+    gcash: 'GCash',
+    maya: 'Maya (PayMaya)',
+    bank: 'Bank Transfer'
+};
+const PAYMENT_METHOD_KEYWORDS = {
+    gcash: ['gcash', 'g-cash', 'g cash'],
+    maya: ['maya', 'paymaya', 'pay maya'],
+    bank: ['bank', 'bank transfer', 'transfer', 'bpi', 'bdo']
+};
+let qrCodesByMethod = {};
+let unsubscribeQrListener = null;
+
+// Initialize Firebase Storage
+async function initializeStorage() {
+    if (storageInitialized && storage) return storage;
+    
+    try {
+        const { getStorage } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js");
+        const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+        
+        // Get the app instance (should be initialized in HTML)
+        const app = getApp();
+        storage = getStorage(app);
+        storageInitialized = true;
+        console.log('Firebase Storage initialized');
+        return storage;
+    } catch (error) {
+        console.error('Error initializing Firebase Storage:', error);
+        return null;
+    }
+}
+
 // Booking state management
 let currentStep = 1;
 let bookingData = {
@@ -19,6 +58,8 @@ let bookingData = {
     personalInfo: {},
     paymentMethod: 'gcash',
     receiptUploaded: false,
+    receiptUrl: null,
+    receiptFile: null, // Store the file object for later upload
     otpVerified: false
 };
 
@@ -48,9 +89,9 @@ function updateSelectedDesign() {
     document.getElementById('selectedDesignDescription').textContent = bookingData.design.description;
 }
 
-// Change design - redirect to collection page
+// Change design - redirect to design portfolio
 function changeDesign() {
-    window.location.href = 'collection page.html';
+    window.location.href = 'design_portfolio.html';
 }
 
 // Calendar functionality
@@ -77,7 +118,86 @@ const unavailableDates = [
     '2024-12-25', '2024-12-31', '2025-01-01', '2024-12-22', '2024-12-29'
 ];
 
-function generateCalendar() {
+// Blocked days functionality
+const APP_ID_BLOCKED = 'nailease25-iapt';
+const BLOCKED_DAYS_COLLECTION = `artifacts/${APP_ID_BLOCKED}/blockedDays`;
+let blockedDaysCache = new Set();
+
+/**
+ * Check if a date is blocked
+ */
+async function isDayBlocked(dateString) {
+    if (blockedDaysCache.has(dateString)) {
+        return true;
+    }
+    
+    try {
+        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
+        const blockedDaySnap = await getDoc(blockedDayRef);
+        
+        if (blockedDaySnap.exists()) {
+            const data = blockedDaySnap.data();
+            if (data.blocked === true) {
+                blockedDaysCache.add(dateString);
+                return true;
+            }
+        }
+    } catch (error) {
+        console.error('Error checking blocked day:', error);
+    }
+    
+    return false;
+}
+
+/**
+ * Initialize blocked days listener
+ */
+async function initializeBlockedDays() {
+    try {
+        const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const blockedDaysRef = collection(db, BLOCKED_DAYS_COLLECTION);
+        
+        onSnapshot(blockedDaysRef, (snapshot) => {
+            blockedDaysCache.clear();
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.date && data.blocked === true) {
+                    blockedDaysCache.add(data.date);
+                } else if (doc.id && data.blocked === true) {
+                    // Also check if the document ID is the date string
+                    blockedDaysCache.add(doc.id);
+                }
+            });
+            // Regenerate calendar if needed
+            if (currentStep === 2) {
+                generateCalendar().catch(err => console.error('Error regenerating calendar:', err));
+            }
+        });
+    } catch (error) {
+        console.error('Error initializing blocked days:', error);
+    }
+}
+
+async function generateCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     
@@ -91,6 +211,32 @@ function generateCalendar() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
+    // Collect all date strings in the visible calendar
+    const startDate = new Date(firstDayOfMonth);
+    startDate.setDate(startDate.getDate() - firstDayWeekday);
+    
+    const dateStrings = [];
+    for (let week = 0; week < 6; week++) {
+        for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+            const currentDateObj = new Date(startDate);
+            currentDateObj.setDate(startDate.getDate() + (week * 7 + dayOfWeek));
+            
+            const day = currentDateObj.getDate();
+            const currentMonth = currentDateObj.getMonth();
+            const currentYear = currentDateObj.getFullYear();
+            const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            dateStrings.push(dateString);
+        }
+    }
+    
+    // Batch check blocked days for all visible dates
+    const blockedDaysPromises = dateStrings.map(dateStr => isDayBlocked(dateStr));
+    const blockedDaysResults = await Promise.all(blockedDaysPromises);
+    const blockedDaysMap = new Map();
+    dateStrings.forEach((dateStr, index) => {
+        blockedDaysMap.set(dateStr, blockedDaysResults[index]);
+    });
+    
     let html = '';
     
     const dayHeaders = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -98,9 +244,6 @@ function generateCalendar() {
     dayHeaders.forEach((day, index) => {
         html += `<div class="calendar-day header bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold text-sm flex items-center justify-center" style="grid-column: ${index + 1};">${day}</div>`;
     });
-    
-    const startDate = new Date(firstDayOfMonth);
-    startDate.setDate(startDate.getDate() - firstDayWeekday);
     
     let dayCount = 0;
     for (let week = 0; week < 6; week++) {
@@ -119,25 +262,41 @@ function generateCalendar() {
             const isToday = currentDateObj.getTime() === today.getTime();
             const isUnavailable = unavailableDates.includes(dateString);
             const isSelected = selectedDate === dateString;
+            const dayIsBlocked = blockedDaysMap.get(dateString) || false;
             
             let classes = 'calendar-day bg-white text-gray-800 font-bold flex items-center justify-center cursor-pointer hover:bg-pink-100 transition-all';
             let clickHandler = '';
+            let inlineStyle = '';
             
             if (!isCurrentMonth || isPast) {
                 classes = 'calendar-day bg-gray-50 text-gray-400 cursor-not-allowed flex items-center justify-center';
+            } else if (dayIsBlocked) {
+                // Blocked day - red background, red text, strikethrough, red border (still clickable)
+                classes = 'calendar-day bg-red-100 text-red-600 font-bold flex items-center justify-center cursor-pointer transition-all';
+                inlineStyle = 'text-decoration: line-through; text-decoration-thickness: 2px; border: 2px solid #dc2626;';
+                clickHandler = `onclick="selectDate('${dateString}')"`;
             } else if (isUnavailable) {
                 classes = 'calendar-day unavailable flex items-center justify-center';
             } else {
                 clickHandler = `onclick="selectDate('${dateString}')"`;
             }
             
-            if (isToday) classes += ' today border-2 border-orange-500';
-            if (isSelected) classes = 'calendar-day selected bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold flex items-center justify-center relative';
+            if (isToday && !dayIsBlocked) {
+                classes += ' today border-2 border-orange-500';
+            }
+            
+            if (isSelected && !dayIsBlocked) {
+                classes = 'calendar-day selected bg-gradient-to-r from-pink-500 to-pink-400 text-white font-bold flex items-center justify-center relative';
+                inlineStyle = '';
+            } else if (isSelected && dayIsBlocked) {
+                // Selected blocked day - keep red styling but make it more prominent
+                inlineStyle = 'text-decoration: line-through; text-decoration-thickness: 2px; border: 2px solid #dc2626; background-color: #fee2e2; color: #dc2626;';
+            }
             
             const gridRow = week + 2; 
             const gridCol = dayOfWeek + 1;
             
-            html += `<div class="${classes}" data-date="${dateString}" ${clickHandler} style="grid-row: ${gridRow}; grid-column: ${gridCol};">${day}</div>`;
+            html += `<div class="${classes}" data-date="${dateString}" ${clickHandler} style="grid-row: ${gridRow}; grid-column: ${gridCol}; ${inlineStyle}">${day}</div>`;
             
             dayCount++;
         }
@@ -145,7 +304,7 @@ function generateCalendar() {
     document.getElementById('calendarGrid').innerHTML = html;
 }
 
-function selectDate(dateString) {
+async function selectDate(dateString) {
     const dateElement = document.querySelector(`[data-date="${dateString}"]`);
     if (!dateElement || dateElement.classList.contains('disabled') || 
         dateElement.classList.contains('unavailable') || 
@@ -157,11 +316,40 @@ function selectDate(dateString) {
         showStep(2);
     }
     
+    // Remove previous selection styling
     document.querySelectorAll('.calendar-day.selected').forEach(el => {
-        el.classList.remove('selected');
+        el.classList.remove('selected', 'blocked-selected');
+        // Reset inline styles
+        el.style.backgroundColor = '';
+        el.style.color = '';
+        el.style.textDecoration = '';
+        el.style.borderColor = '';
+        el.style.borderWidth = '';
     });
     
-    dateElement.classList.add('selected');
+    // Check if the selected date is blocked
+    const dayIsBlocked = await isDayBlocked(dateString);
+    
+    if (dayIsBlocked) {
+        // Apply red color and strikethrough for blocked dates (already visible, but make it more prominent when selected)
+        dateElement.classList.add('selected', 'blocked-selected');
+        dateElement.style.backgroundColor = '#fee2e2'; // red-100
+        dateElement.style.color = '#dc2626'; // red-600
+        dateElement.style.textDecoration = 'line-through';
+        dateElement.style.textDecorationThickness = '2px';
+        dateElement.style.borderColor = '#dc2626'; // red-600
+        dateElement.style.borderWidth = '2px';
+    } else {
+        // Normal selected styling - remove any blocked styling
+        dateElement.classList.add('selected');
+        dateElement.classList.remove('blocked-selected');
+        dateElement.style.backgroundColor = '';
+        dateElement.style.color = '';
+        dateElement.style.textDecoration = '';
+        dateElement.style.borderColor = '';
+        dateElement.style.borderWidth = '';
+    }
+    
     selectedDate = dateString;
     bookingData.selectedDate = dateString;
     
@@ -170,13 +358,15 @@ function selectDate(dateString) {
     document.getElementById('selectedDateDisplay').textContent = formattedDate;
     
     generateTimeSlots(dateString);
+    // Start realtime updates for this date (reflect admin/user bookings live)
+    startRealtimeBookedSlotsListener(dateString);
     
     showStep(2);
 }
 
 document.getElementById('prevMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() - 1);
-    generateCalendar();
+    generateCalendar().catch(err => console.error('Error generating calendar:', err));
     if (currentStep === 2) {
         showStep(2);
     }
@@ -184,7 +374,7 @@ document.getElementById('prevMonth').addEventListener('click', () => {
 
 document.getElementById('nextMonth').addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
-    generateCalendar();
+    generateCalendar().catch(err => console.error('Error generating calendar:', err));
     if (currentStep === 2) {
         showStep(2);
     }
@@ -205,8 +395,8 @@ function getTimeSlotsForDate(dateString) {
     
     console.log(`Date: ${dateString}, Day of Week: ${dayOfWeek} (${date.toLocaleDateString('en-US', { weekday: 'long' })})`);
     
-    // Monday-Friday (1-5): 8am, 12pm, 4pm, 6pm, 8pm
-    // Saturday-Sunday (0, 6): 8am, 10am, 1pm, 3pm, 5pm, 7pm
+    // Monday-Friday (1-5): 8:00 AM, 12:00 PM, 4:00 PM, 6:00 PM, 8:00 PM
+    // Saturday-Sunday (0, 6): 8:00 AM, 10:00 AM, 1:00 PM, 3:00 PM, 5:00 PM, 7:00 PM
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         // Weekdays (Mon-Fri)
         console.log('Returning weekday time slots');
@@ -218,12 +408,196 @@ function getTimeSlotsForDate(dateString) {
     }
 }
 
-const unavailableTimeSlots = {
-    '2024-12-20': ['10:00 AM', '2:00 PM'],
-    '2024-12-21': ['9:00 AM', '1:00 PM', '3:00 PM']
-};
+// Store unavailable time slots with appointment details (fetched from Firestore in real-time)
+const unavailableTimeSlots = {};
+const bookedAppointmentsByDate = {}; // Store full appointment details by date
+let unsubscribeBookedSlotsListener = null;
 
-function generateTimeSlots(date) {
+// Check if a time slot has already passed for today's date
+function isTimePassed(dateString, timeString) {
+    if (!dateString || !timeString) return false;
+    
+    // Parse the selected date
+    const [year, month, day] = dateString.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    
+    // Get today's date (reset to midnight for comparison)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    
+    // If the selected date is not today, the time hasn't passed
+    if (selectedDateOnly.getTime() !== today.getTime()) {
+        return false;
+    }
+    
+    // Parse time string (e.g., "8:00 AM" or "2:00 PM")
+    const timeMatch = timeString.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!timeMatch) return false;
+    
+    let hours = parseInt(timeMatch[1]);
+    const minutes = parseInt(timeMatch[2]);
+    const period = timeMatch[3].toUpperCase();
+    
+    // Convert to 24-hour format
+    if (period === 'PM' && hours !== 12) {
+        hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+    }
+    
+    // Create a date object for the selected date and time
+    const selectedDateTime = new Date(year, month - 1, day, hours, minutes);
+    const now = new Date();
+    
+    // Check if the time has passed
+    return selectedDateTime < now;
+}
+
+// Fetch booked time slots from Firestore for a specific date with full appointment details
+async function fetchBookedTimeSlots(dateString) {
+    try {
+        // Import Firestore functions
+        const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const APP_ID = 'nailease25-iapt';
+        const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+        
+        // Query for existing appointments with same date
+        // Exclude cancelled appointments
+        const q = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', dateString)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        
+        // Collect booked times and appointment details (normalize to 12-hour format)
+        const bookedTimes = [];
+        const appointmentsByTime = {};
+        
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Only consider non-cancelled appointments
+            if (data.status !== 'cancelled' && data.selectedTime) {
+                let time = data.selectedTime;
+                // Normalize time format (handle both 12-hour and 24-hour)
+                if (!time.includes('AM') && !time.includes('PM')) {
+                    // Convert 24-hour format (08:00) to 12-hour format (8:00 AM)
+                    const [hours, minutes] = time.split(':');
+                    const hour24 = parseInt(hours, 10);
+                    let hour12 = hour24;
+                    let period = 'AM';
+                    
+                    if (hour24 === 0) {
+                        hour12 = 12;
+                        period = 'AM';
+                    } else if (hour24 === 12) {
+                        hour12 = 12;
+                        period = 'PM';
+                    } else if (hour24 > 12) {
+                        hour12 = hour24 - 12;
+                        period = 'PM';
+                    } else {
+                        hour12 = hour24;
+                        period = 'AM';
+                    }
+                    time = `${hour12}:00 ${period}`;
+                }
+                bookedTimes.push(time);
+                
+                // Store full appointment details
+                appointmentsByTime[time] = {
+                    clientName: data.clientName || data.personalInfo?.fullName || 'Unknown Client',
+                    source: data.source || 'online',
+                    status: data.status || 'pending'
+                };
+            }
+        });
+        
+        // Update unavailableTimeSlots and bookedAppointmentsByDate for this date
+        unavailableTimeSlots[dateString] = bookedTimes;
+        bookedAppointmentsByDate[dateString] = appointmentsByTime;
+        
+        return bookedTimes;
+    } catch (error) {
+        console.error('Error fetching booked time slots:', error);
+        return [];
+    }
+}
+
+// Begin a realtime listener for bookings on the selected date
+async function startRealtimeBookedSlotsListener(dateString) {
+    try {
+        if (!dateString) return;
+        if (typeof unsubscribeBookedSlotsListener === 'function') {
+            unsubscribeBookedSlotsListener();
+            unsubscribeBookedSlotsListener = null;
+        }
+        const { getFirestore, collection, query, where, onSnapshot } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        const APP_ID = 'nailease25-iapt';
+        const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+        const q = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', dateString)
+        );
+        unsubscribeBookedSlotsListener = onSnapshot(q, (snapshot) => {
+            const normalizeTime = (time) => {
+                if (!time) return null;
+                if (!time.includes('AM') && !time.includes('PM')) {
+                    const [hours] = time.split(':');
+                    const hour24 = parseInt(hours, 10);
+                    const hour12 = (hour24 % 12) || 12;
+                    const period = hour24 >= 12 ? 'PM' : 'AM';
+                    return `${hour12}:00 ${period}`;
+                }
+                const m = time.match(/^\s*(\d{1,2})\s*:\s*(\d{1,2})\s*(AM|PM)\s*$/i);
+                if (!m) return time.trim();
+                const h = (Number(m[1]) % 12) || 12;
+                const period = m[3].toUpperCase();
+                return `${h}:00 ${period}`;
+            };
+            const bookedTimes = [];
+            const appointmentsByTime = {};
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.status === 'cancelled') return;
+                const t = normalizeTime(data.selectedTime);
+                if (!t) return;
+                bookedTimes.push(t);
+                appointmentsByTime[t] = {
+                    clientName: data.clientName || data.personalInfo?.fullName || 'Unknown Client',
+                    source: data.source || 'online',
+                    status: data.status || 'pending'
+                };
+            });
+            unavailableTimeSlots[dateString] = bookedTimes;
+            bookedAppointmentsByDate[dateString] = appointmentsByTime;
+            if (bookingData.selectedDate === dateString) {
+                generateTimeSlots(dateString);
+            }
+        });
+    } catch (err) {
+        console.error('startRealtimeBookedSlotsListener error:', err);
+    }
+}
+//
+async function generateTimeSlots(date) {
     if (!date) {
         console.error('generateTimeSlots: No date provided');
         return;
@@ -231,10 +605,16 @@ function generateTimeSlots(date) {
     
     console.log('generateTimeSlots called with date:', date);
     
+    // Check if day is blocked
+    const dayIsBlocked = await isDayBlocked(date);
+    
+    // Fetch real-time booked slots from Firestore
+    await fetchBookedTimeSlots(date);
     const unavailableForDate = unavailableTimeSlots[date] || [];
     const timeSlots = getTimeSlotsForDate(date);
     
     console.log('Generated time slots:', timeSlots);
+    console.log('Unavailable slots for', date, ':', unavailableForDate);
     
     let html = '';
     
@@ -246,7 +626,9 @@ function generateTimeSlots(date) {
     const timeSlotInfoEl = document.getElementById('timeSlotInfo');
     
     if (timeSlotInfoEl) {
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        if (dayIsBlocked) {
+            timeSlotInfoEl.innerHTML = `<strong style="color: #dc2626;">${dayName} - This day is blocked. All time slots are unavailable.</strong>`;
+        } else if (dayOfWeek >= 1 && dayOfWeek <= 5) {
             // Weekdays (Mon-Fri)
             timeSlotInfoEl.innerHTML = `<strong>${dayName} (Weekday):</strong> 8:00 AM, 12:00 PM, 4:00 PM, 6:00 PM, 8:00 PM`;
         } else {
@@ -257,11 +639,35 @@ function generateTimeSlots(date) {
     
     timeSlots.forEach(time => {
         const isUnavailable = unavailableForDate.includes(time);
+        const isPassed = isTimePassed(date, time);
         const baseClasses = 'px-4 py-3 border-2 rounded-xl text-center font-bold transition-all';
-        const classes = isUnavailable 
-            ? `${baseClasses} bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed`
-            : `${baseClasses} bg-white text-gray-700 border-gray-300 hover:border-pink-500 hover:bg-pink-50 cursor-pointer`;
-        html += `<div class="${classes}" data-time="${time}" onclick="selectTime('${time}')">${time}</div>`;
+        
+        if (dayIsBlocked) {
+            // Day is blocked - all slots unavailable
+            html += `<div class="${baseClasses} bg-red-100 text-red-700 border-red-500 cursor-not-allowed" data-time="${time}" title="This day is blocked" onclick="selectTime('${time}')">
+                <div class="text-base font-extrabold">${time}</div>
+                <div class="text-xs text-red-800 font-semibold mt-1">Day Blocked</div>
+            </div>`;
+        } else if (isPassed) {
+            // Time has already passed - mark as unavailable with red styling
+            html += `<div class="${baseClasses} bg-red-50 text-red-400 border-red-300 cursor-not-allowed" data-time="${time}" title="This time already passed" onclick="selectTime('${time}')">
+                <div class="text-base font-extrabold">${time}</div>
+                <div class="text-xs text-red-600 font-semibold mt-1">Passed</div>
+            </div>`;
+        } else if (isUnavailable) {
+            // Pre-booked or unavailable - already booked by someone else
+            // Simple red display with "Unavailable" only
+            html += `<div class="${baseClasses} bg-red-50 text-red-600 border-red-500 cursor-not-allowed" data-time="${time}" title="This time slot is already booked" onclick="selectTime('${time}')">
+                <div class="text-base font-extrabold">${time}</div>
+                <div class="text-xs text-red-700 font-semibold mt-1">Unavailable</div>
+            </div>`;
+        } else {
+            // Available
+            html += `<div class="${baseClasses} bg-green-50 text-green-600 border-green-500 cursor-pointer hover:border-green-600 hover:bg-green-100" data-time="${time}" onclick="selectTime('${time}')">
+                <div class="text-base font-extrabold">${time}</div>
+                <div class="text-xs text-green-700 font-semibold mt-1">Available</div>
+            </div>`;
+        }
     });
     
     const timeGridEl = document.getElementById('timeGrid');
@@ -272,10 +678,25 @@ function generateTimeSlots(date) {
         console.error('Time grid element not found!');
     }
 }
-
+//
 function selectTime(time) {
     const timeElement = document.querySelector(`[data-time="${time}"]`);
-    if (timeElement.classList.contains('unavailable') || timeElement.classList.contains('cursor-not-allowed')) {
+    if (!timeElement) return;
+    
+    // Check if time is unavailable or has passed
+    if (timeElement.classList.contains('unavailable') || 
+        timeElement.classList.contains('cursor-not-allowed') ||
+        timeElement.title === 'This time already passed' ||
+        timeElement.title === 'This time slot is already booked' ||
+        timeElement.title === 'This day is blocked') {
+        // Show alert for passed times, booked slots, or blocked days
+        if (timeElement.title === 'This time already passed') {
+            alert('This time already passed. Please select a future time slot.');
+        } else if (timeElement.title === 'This time slot is already booked') {
+            alert('This time slot is already booked. Please select a different time.');
+        } else if (timeElement.title === 'This day is blocked') {
+            alert('This day is blocked. Please select a different date.');
+        }
         return;
     }
     
@@ -523,8 +944,9 @@ function saveDetails() {
     showDisplayView();
 }
 
-function nextStep() {
-    if (!validateCurrentStep()) {
+async function nextStep() {
+    const isValid = await validateCurrentStep();
+    if (!isValid) {
         return;
     }
     
@@ -545,7 +967,7 @@ function previousStep() {
 }
 
 // Validation functions
-function validateCurrentStep() {
+async function validateCurrentStep() {
     switch (currentStep) {
         case 1:
             return true;
@@ -553,6 +975,17 @@ function validateCurrentStep() {
             if (!bookingData.selectedDate) {
                 alert('Please select a date for your appointment.');
                 return false;
+            }
+            // Check if selected date is blocked
+            try {
+                const blocked = await isDayBlocked(bookingData.selectedDate);
+                if (blocked) {
+                    alert('The selected date is blocked. Please select a different date.');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error checking blocked date:', error);
+                // If check fails, allow to proceed
             }
             return true;
         case 3:
@@ -722,11 +1155,14 @@ function updatePaymentSummary() {
         bookingData.selectedDate ? formatDateString(bookingData.selectedDate) : '-';
     document.getElementById('paymentTime').textContent = bookingData.selectedTime || '-';
     document.getElementById('reservationAmount').textContent = `₱${reservationFee.toFixed(2)}`;
+    
+    updatePaymentQRCode();
 }
 
 // Payment method selection
 document.addEventListener('DOMContentLoaded', function() {
     const paymentMethods = document.querySelectorAll('.payment-method');
+    const selectedPaymentMethodLabel = document.getElementById('selectedPaymentMethod');
     
     paymentMethods.forEach(method => {
         method.addEventListener('click', function() {
@@ -736,15 +1172,119 @@ document.addEventListener('DOMContentLoaded', function() {
             const methodType = this.dataset.method;
             bookingData.paymentMethod = methodType;
             
-            const methodNames = {
-                gcash: 'GCash',
-                maya: 'Maya (PayMaya)',
-                bank: 'Bank Transfer'
-            };
-            document.getElementById('selectedPaymentMethod').textContent = methodNames[methodType];
+            if (selectedPaymentMethodLabel) {
+                selectedPaymentMethodLabel.textContent = PAYMENT_METHOD_LABELS[methodType] || methodType.toUpperCase();
+            }
+
+            updatePaymentQRCode();
         });
     });
+
+    // Set default selected label
+    if (selectedPaymentMethodLabel) {
+        selectedPaymentMethodLabel.textContent = PAYMENT_METHOD_LABELS[bookingData.paymentMethod] || bookingData.paymentMethod.toUpperCase();
+    }
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupQRCodeRealtimeListener();
+    updatePaymentQRCode();
+});
+
+window.addEventListener('beforeunload', function() {
+    if (typeof unsubscribeQrListener === 'function') {
+        unsubscribeQrListener();
+    }
+});
+
+function determinePaymentMethodForQRCode(qr) {
+    if (!qr) return null;
+    const explicitMethod = (qr.paymentMethod || qr.method || '').toString().trim().toLowerCase();
+    if (explicitMethod && PAYMENT_METHOD_LABELS[explicitMethod]) {
+        return explicitMethod;
+    }
+
+    const name = (qr.name || '').toString().toLowerCase();
+    if (!name) return null;
+
+    for (const [method, keywords] of Object.entries(PAYMENT_METHOD_KEYWORDS)) {
+        if (keywords.some(keyword => name.includes(keyword))) {
+            return method;
+        }
+    }
+    return null;
+}
+
+function getQrImageSource(qr) {
+    if (!qr) return null;
+    if (qr.imageDataUrl) return qr.imageDataUrl;
+    if (qr.imageUrl) return qr.imageUrl;
+    if (qr.originalUrl) return qr.originalUrl;
+    return null;
+}
+
+async function setupQRCodeRealtimeListener() {
+    try {
+        const { getFirestore, collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        const db = getFirestore();
+        const qrCollectionRef = collection(db, QR_COLLECTION_PATH);
+
+        if (typeof unsubscribeQrListener === 'function') {
+            unsubscribeQrListener();
+        }
+
+        unsubscribeQrListener = onSnapshot(qrCollectionRef, (snapshot) => {
+            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const map = {};
+
+            docs.forEach(qrDoc => {
+                const method = determinePaymentMethodForQRCode(qrDoc);
+                if (!method) return;
+                if (qrDoc.active === false) return;
+                if (!map[method]) {
+                    map[method] = qrDoc;
+                }
+            });
+
+            qrCodesByMethod = map;
+            updatePaymentQRCode();
+        }, (error) => {
+            console.error('Error listening to QR codes:', error);
+        });
+    } catch (error) {
+        console.error('Failed to set up QR code listener:', error);
+    }
+}
+
+function updatePaymentQRCode() {
+    const qrImageEl = document.getElementById('paymentQrImage');
+    const placeholderEl = document.getElementById('paymentQrPlaceholder');
+    const placeholderTextEl = document.getElementById('paymentQrPlaceholderText');
+    const statusEl = document.getElementById('paymentQrStatus');
+
+    if (!qrImageEl || !placeholderEl || !placeholderTextEl || !statusEl) return;
+
+    const method = bookingData.paymentMethod || 'gcash';
+    const label = PAYMENT_METHOD_LABELS[method] || method.toUpperCase();
+    const qrData = qrCodesByMethod[method];
+    const src = getQrImageSource(qrData);
+
+    if (qrData && src) {
+        qrImageEl.src = src;
+        qrImageEl.alt = `${label} QR Code`;
+        qrImageEl.classList.remove('hidden');
+
+        placeholderEl.classList.add('hidden');
+        statusEl.textContent = `${label} QR code is active${qrData.name ? ` (${qrData.name})` : ''}.`;
+        statusEl.classList.remove('hidden');
+    } else {
+        qrImageEl.src = '';
+        qrImageEl.classList.add('hidden');
+        placeholderEl.classList.remove('hidden');
+        placeholderTextEl.textContent = `No active QR code for ${label}.`;
+        statusEl.classList.add('hidden');
+    }
+}
 
 // Receipt upload functionality
 document.addEventListener('DOMContentLoaded', function() {
@@ -780,7 +1320,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function handleReceiptUpload(file) {
+async function handleReceiptUpload(file) {
     if (!file.type.startsWith('image/')) {
         alert('Please upload an image file (PNG, JPG, etc.)');
         return;
@@ -791,20 +1331,26 @@ function handleReceiptUpload(file) {
         return;
     }
     
+    // Store file for later upload
+    bookingData.receiptFile = file;
     bookingData.receiptUploaded = true;
     
+    // Show preview immediately
     const uploadedReceipt = document.getElementById('uploadedReceipt');
     uploadedReceipt.style.display = 'block';
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+    
     uploadedReceipt.innerHTML = `
         <div class="flex items-center gap-4 bg-white border border-gray-300 rounded-xl p-4">
             <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                </svg>
+                <img src="${previewUrl}" alt="Receipt preview" class="w-full h-full object-cover rounded-lg">
             </div>
             <div class="flex-1">
                 <div class="font-bold text-gray-800">${file.name}</div>
                 <div class="text-gray-600 text-sm">${(file.size / 1024).toFixed(1)} KB</div>
+                <div class="text-xs text-green-600 mt-1">✓ Ready to upload</div>
             </div>
             <button onclick="removeReceipt()" class="bg-red-500 hover:bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center cursor-pointer transition-all">×</button>
         </div>
@@ -816,69 +1362,271 @@ function handleReceiptUpload(file) {
 
 window.removeReceipt = function() { // Expose globally for onclick attribute
     bookingData.receiptUploaded = false;
+    bookingData.receiptFile = null;
+    bookingData.receiptUrl = null;
     document.getElementById('uploadedReceipt').classList.add('hidden');
     document.getElementById('receiptUpload').classList.remove('hidden');
     document.getElementById('receiptFile').value = '';
 }
 
+// Upload receipt to Firebase Storage
+async function uploadReceiptToStorage(file, bookingId) {
+    try {
+        // Initialize storage if not already done
+        const storageInstance = await initializeStorage();
+        if (!storageInstance) {
+            throw new Error('Firebase Storage not available');
+        }
+
+        const { ref, uploadBytes, getDownloadURL } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js");
+        
+        // Create a unique file path
+        const timestamp = Date.now();
+        const fileName = `receipts/${bookingId}_${timestamp}_${file.name}`;
+        const storageRef = ref(storageInstance, fileName);
+        
+        // Upload file
+        await uploadBytes(storageRef, file);
+        
+        // Get download URL
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        console.log('Receipt uploaded successfully:', downloadURL);
+        return downloadURL;
+    } catch (error) {
+        console.error('Error uploading receipt:', error);
+        throw error;
+    }
+}
+
+// Check for duplicate appointments (same date and time)
+async function checkDuplicateAppointment(selectedDate, selectedTime) {
+    try {
+        // Import Firestore functions
+        const { getFirestore, collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        const APP_ID = 'nailease25-iapt';
+        const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+        
+        // Query for existing appointments with same date and time
+        // Exclude cancelled appointments
+        const q = query(
+            collection(db, BOOKINGS_COLLECTION),
+            where('selectedDate', '==', selectedDate),
+            where('selectedTime', '==', selectedTime)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        
+        // Check if any non-cancelled appointments exist
+        const existingBookings = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Only consider non-cancelled appointments as conflicts
+            if (data.status !== 'cancelled') {
+                existingBookings.push({
+                    id: doc.id,
+                    ...data
+                });
+            }
+        });
+        
+        return existingBookings.length > 0 ? existingBookings : null;
+    } catch (error) {
+        console.error('Error checking duplicate appointment:', error);
+        // If there's an error checking, we'll allow the booking but log it
+        return null;
+    }
+}
+
+// Save booking to Firestore with duplicate prevention
+async function saveBookingToFirestore(bookingData, receiptUrl) {
+    try {
+        // Import Firestore functions
+        const { getFirestore, collection, addDoc, serverTimestamp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+        
+        // Get db from global scope or initialize
+        let db = window.db;
+        if (!db) {
+            const { getApp } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+            const app = getApp();
+            db = getFirestore(app);
+        }
+        
+        // Check for duplicate appointments BEFORE saving
+        const duplicates = await checkDuplicateAppointment(bookingData.selectedDate, bookingData.selectedTime);
+        if (duplicates && duplicates.length > 0) {
+            const existingBooking = duplicates[0];
+            throw new Error(`This time slot is already booked. ${existingBooking.clientName ? `Booked by: ${existingBooking.clientName}` : 'Another appointment exists for this date and time.'}`);
+        }
+        
+        const reservationFee = bookingData.design.price / 2;
+        const APP_ID = 'nailease25-iapt';
+        const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+        
+        // Get current user
+        const auth = window.auth;
+        const user = auth ? auth.currentUser : null;
+        
+        const payload = {
+            bookingId: bookingData.bookingId,
+            clientName: bookingData.personalInfo.fullName || 'Unknown',
+            clientPhone: bookingData.personalInfo.phone || '',
+            clientEmail: bookingData.personalInfo.email || '',
+            selectedDate: bookingData.selectedDate,
+            selectedTime: bookingData.selectedTime,
+            designName: bookingData.design.name,
+            status: 'pending',
+            source: 'online',
+            platform: 'website',
+            totalAmount: bookingData.design.price,
+            amountPaid: reservationFee,
+            paymentMethod: bookingData.paymentMethod || 'gcash',
+            receiptUrl: receiptUrl || null,
+            receiptImageUrl: receiptUrl || null, // Alias for compatibility
+            receiptUploaded: !!receiptUrl,
+            userId: user ? user.uid : null,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+        
+        // Save to Firestore
+        const docRef = await addDoc(collection(db, BOOKINGS_COLLECTION), payload);
+        console.log('Booking saved to Firestore with ID:', docRef.id);
+        
+        return docRef.id;
+    } catch (error) {
+        console.error('Error saving booking to Firestore:', error);
+        throw error;
+    }
+}
+
 // Complete booking
 async function completeBooking() {
-    const bookingId = 'DCAC-' + new Date().getFullYear() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-    
-    // Store bookingId in bookingData for calendar integration
-    bookingData.bookingId = bookingId;
-    
-    document.getElementById('stepNavigation').style.display = 'none';
-    document.getElementById('successStep').style.display = 'block';
-    
-    const reservationFee = bookingData.design.price / 2;
-    const remainingBalance = bookingData.design.price - reservationFee;
-    
-    document.getElementById('bookingId').textContent = '#' + bookingId;
-    document.getElementById('summaryDesign').textContent = bookingData.design.name;
-    // Format date string without timezone conversion to avoid date offset
-    document.getElementById('summaryDate').textContent = formatDateString(bookingData.selectedDate);
-    document.getElementById('summaryTime').textContent = bookingData.selectedTime;
-    document.getElementById('summaryTotal').textContent = `₱${bookingData.design.price.toFixed(2)}`;
-    document.getElementById('summaryPaid').textContent = `₱${reservationFee.toFixed(2)}`;
-    document.getElementById('summaryBalance').textContent = `₱${remainingBalance.toFixed(2)}`;
-    
-    console.log('Booking completed:', {
-        bookingId,
-        ...bookingData,
-        status: 'pending',
-        createdAt: new Date().toISOString()
-    });
-    
-    // Automatically create calendar event in admin's Google Calendar
-    const calendarStatusEl = document.getElementById('calendarStatus');
-    if (calendarStatusEl) {
-        calendarStatusEl.innerHTML = '<div class="text-blue-600 flex items-center gap-2"><svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Adding to admin calendar...</div>';
-        calendarStatusEl.style.display = 'block';
-    }
-    
-    // Call admin calendar function
-    if (typeof createAdminCalendarEvent === 'function') {
-        try {
-            const calendarResult = await createAdminCalendarEvent(bookingData);
-            if (calendarStatusEl) {
-                if (calendarResult.success) {
-                    calendarStatusEl.innerHTML = `<div class="text-green-600 flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg> Added to admin calendar successfully!</div>`;
-                } else {
-                    calendarStatusEl.innerHTML = `<div class="text-yellow-600 flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg> Calendar: ${calendarResult.message || 'Not configured'}</div>`;
-                }
-            }
-        } catch (error) {
-            console.error('Error creating calendar event:', error);
-            if (calendarStatusEl) {
-                calendarStatusEl.innerHTML = `<div class="text-yellow-600 flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg> Calendar: Setup required (see GOOGLE_CALENDAR_SETUP.md)</div>`;
+    try {
+        // Check if selected date is blocked before completing booking
+        const dayIsBlocked = await isDayBlocked(bookingData.selectedDate);
+        if (dayIsBlocked) {
+            alert('The selected date is blocked. Please select a different date.');
+            showStep(2);
+            return;
+        }
+        
+        const bookingId = 'DCAC-' + new Date().getFullYear() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        
+        // Store bookingId in bookingData for calendar integration
+        bookingData.bookingId = bookingId;
+        
+        // Show loading state
+        document.getElementById('stepNavigation').style.display = 'none';
+        const successStep = document.getElementById('successStep');
+        successStep.style.display = 'block';
+        
+        // Show uploading message
+        const bookingIdEl = document.getElementById('bookingId');
+        if (bookingIdEl) {
+            bookingIdEl.textContent = '#' + bookingId;
+            bookingIdEl.innerHTML = `#${bookingId} <span class="text-sm text-blue-600">(Uploading receipt...)</span>`;
+        }
+        
+        // Upload receipt if available
+        let receiptUrl = null;
+        if (bookingData.receiptFile) {
+            try {
+                receiptUrl = await uploadReceiptToStorage(bookingData.receiptFile, bookingId);
+                bookingData.receiptUrl = receiptUrl;
+                console.log('Receipt uploaded:', receiptUrl);
+            } catch (error) {
+                console.error('Failed to upload receipt:', error);
+                alert('Warning: Receipt upload failed, but booking will still be saved. Error: ' + error.message);
             }
         }
+        
+        // Save booking to Firestore
+        try {
+            await saveBookingToFirestore(bookingData, receiptUrl);
+            console.log('Booking saved successfully');
+        } catch (error) {
+            console.error('Failed to save booking:', error);
+            
+            // Hide success step and show error
+            successStep.style.display = 'none';
+            document.getElementById('stepNavigation').style.display = 'flex';
+            
+            // Show user-friendly error message
+            let errorMessage = 'Error saving booking. Please try again or contact support.';
+            
+            if (error.message && error.message.includes('already booked')) {
+                errorMessage = `⚠️ ${error.message}\n\nPlease select a different date and time.`;
+            } else if (error.message) {
+                errorMessage = `⚠️ ${error.message}`;
+            }
+            
+            alert(errorMessage);
+            
+            // Go back to step 2 (date selection) if it's a duplicate booking
+            if (error.message && error.message.includes('already booked')) {
+                showStep(2);
+            }
+            
+            return;
+        }
+        
+        // Update success summary
+        const reservationFee = bookingData.design.price / 2;
+        const remainingBalance = bookingData.design.price - reservationFee;
+        
+        document.getElementById('bookingId').textContent = '#' + bookingId;
+        document.getElementById('summaryDesign').textContent = bookingData.design.name;
+        document.getElementById('summaryDate').textContent = formatDateString(bookingData.selectedDate);
+        document.getElementById('summaryTime').textContent = bookingData.selectedTime;
+        document.getElementById('summaryTotal').textContent = `₱${bookingData.design.price.toFixed(2)}`;
+        document.getElementById('summaryPaid').textContent = `₱${reservationFee.toFixed(2)}`;
+        document.getElementById('summaryBalance').textContent = `₱${remainingBalance.toFixed(2)}`;
+        
+        // Automatically create calendar event in admin's Google Calendar
+        const calendarStatusEl = document.getElementById('calendarStatus');
+        if (calendarStatusEl) {
+            calendarStatusEl.innerHTML = '<div class="text-blue-600 flex items-center gap-2"><svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Adding to admin calendar...</div>';
+            calendarStatusEl.style.display = 'block';
+        }
+        
+        // Call admin calendar function - ensure source is set
+        bookingData.source = 'online'; // Mark as online booking
+        if (typeof createAdminCalendarEvent === 'function') {
+            try {
+                const calendarResult = await createAdminCalendarEvent(bookingData);
+                if (calendarStatusEl) {
+                    if (calendarResult.success) {
+                        calendarStatusEl.innerHTML = `<div class="text-green-600 flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg> Added to admin calendar successfully!</div>`;
+                    } else {
+                        calendarStatusEl.innerHTML = `<div class="text-yellow-600 flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg> Calendar: ${calendarResult.message || 'Not configured'}</div>`;
+                    }
+                }
+            } catch (error) {
+                console.error('Error creating calendar event:', error);
+                if (calendarStatusEl) {
+                    calendarStatusEl.innerHTML = `<div class="text-yellow-600 flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg> Calendar: Setup required (see GOOGLE_CALENDAR_SETUP.md)</div>`;
+                }
+            }
+        }
+        
+        setTimeout(() => {
+            console.log('Booking confirmation sent!');
+            alert('Booking submitted successfully! Your receipt has been uploaded and will be reviewed by our team.');
+        }, 2000);
+    } catch (error) {
+        console.error('Error completing booking:', error);
+        alert('An error occurred while completing your booking. Please try again or contact support.');
     }
-    
-    setTimeout(() => {
-        console.log('Booking confirmation sent!');
-    }, 2000);
 }
 
 // Download booking details
@@ -932,8 +1680,13 @@ window.resendOTP = resendOTP;
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize calendar and steps immediately (before auth check)
     initializeFromURL();
-    generateCalendar();
+    generateCalendar().catch(err => console.error('Error generating calendar:', err));
     showStep(currentStep);
+    
+    // Initialize blocked days listener
+    initializeBlockedDays().catch(err => {
+        console.error('Error initializing blocked days:', err);
+    });
     
     // Scroll to step1 if hash is present
     if (window.location.hash === '#step1') {
@@ -1002,7 +1755,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // User is logged in, refresh initialization
                 initializeFromURL();
-                generateCalendar();
+                generateCalendar().catch(err => console.error('Error generating calendar:', err));
                 showStep(currentStep); 
                 
                 // Auto-advance from step 1 if design is pre-selected
@@ -1019,7 +1772,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Failed to load Firebase Auth:', err);
             // Fallback: try to proceed without auth check (for testing)
             initializeFromURL();
-            generateCalendar();
+            generateCalendar().catch(err => console.error('Error generating calendar:', err));
             showStep(currentStep);
         });
     } else {
@@ -1032,7 +1785,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             return;
                         }
                         initializeFromURL();
-                        generateCalendar();
+                        generateCalendar().catch(err => console.error('Error generating calendar:', err));
                         showStep(currentStep);
                     });
                 });
@@ -1042,3 +1795,4 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
     }
 });
+

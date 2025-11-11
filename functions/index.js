@@ -6,6 +6,7 @@ const iprogsmsToken = defineSecret('IPROGSMS_TOKEN');
 const calendarCredentials = defineSecret('GOOGLE_CALENDAR_CREDENTIALS');
 const { setGlobalOptions } = require("firebase-functions");
 const { onRequest } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 
 setGlobalOptions({ maxInstances: 10 });
@@ -262,14 +263,21 @@ exports.createCalendarEvent = onRequest({
         const start = new Date(startDateTime);
         const end = new Date(start.getTime() + 60 * 60 * 1000).toISOString().replace('Z', '+00:00');
 
+        // Build event title with client name and booking type
+        const clientName = bookingData.personalInfo?.fullName || 'Unknown Client';
+        const bookingType = bookingData.source === 'walk-in' ? 'Walk-in' : 'Online';
+        const designName = bookingData.design?.name || 'Nail Service';
+        const eventTitle = `${clientName} - ${designName} (${bookingType})`;
+        
         const resource = {
-            summary: `Nail Appointment${bookingData.design?.name ? ` - ${bookingData.design.name}` : ''}`,
+            summary: eventTitle,
             description: [
+                `Booking Type: ${bookingType}`,
                 `Booking ID: ${bookingData.bookingId || 'N/A'}`,
-                bookingData.design?.name ? `Design: ${bookingData.design.name}` : null,
-                bookingData.personalInfo?.fullName ? `Client: ${bookingData.personalInfo.fullName}` : null,
+                `Client: ${clientName}`,
                 bookingData.personalInfo?.phone ? `Phone: ${bookingData.personalInfo.phone}` : null,
                 bookingData.personalInfo?.email ? `Email: ${bookingData.personalInfo.email}` : null,
+                bookingData.design?.name ? `Design: ${bookingData.design.name}` : null,
                 bookingData.notes ? `Notes: ${bookingData.notes}` : null,
                 bookingData.design?.price ? `Total Amount: ₱${Number(bookingData.design.price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : null,
                 bookingData.reservationFee ? `Reservation Fee: ₱${Number(bookingData.reservationFee).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : null
@@ -373,6 +381,157 @@ exports.listCalendarEvents = onRequest({
             success: false,
             message: error.message || 'Failed to fetch calendar events.'
         });
+    }
+});
+
+// --- Public Availability Aggregation ---
+// Keep a lightweight, public-friendly availability mirror:
+// artifacts/{APP_ID}/availability/{YYYY-MM-DD} => { takenTimes: ["8:00 AM", ...], updatedAt: serverTimestamp() }
+const APP_ID = 'nailease25-iapt';
+const BOOKINGS_COLLECTION = `artifacts/${APP_ID}/bookings`;
+const AVAILABILITY_COLLECTION = `artifacts/${APP_ID}/availability`;
+const DEFAULT_CALENDAR_ID = 'primary';
+
+function normalizeTo12Hour(timeStr) {
+    if (!timeStr) return null;
+    const s = String(timeStr).trim();
+    // 12-hour like "8:00 AM", "8:00AM", "8 AM"
+    let m12 = s.match(/^\s*(\d{1,2})(?::\s*(\d{1,2}))?\s*(AM|PM)\s*$/i);
+    if (m12) {
+        const h = (parseInt(m12[1], 10) % 12) || 12;
+        const period = m12[3].toUpperCase();
+        return `${h}:00 ${period}`;
+    }
+    // 24-hour like "08:00", "08:00:00"
+    const m24 = s.match(/^\s*(\d{1,2})(?::\s*(\d{1,2}))?(?::\s*\d{1,2})?\s*$/);
+    if (m24) {
+        const hh = parseInt(m24[1], 10);
+        const period = hh >= 12 ? 'PM' : 'AM';
+        const h12 = (hh % 12) || 12;
+        return `${h12}:00 ${period}`;
+    }
+    return s;
+}
+
+async function recomputeAvailabilityForDate(dateStr, tx = null) {
+    if (!dateStr) return;
+    const db = admin.firestore();
+    const q = db.collection(BOOKINGS_COLLECTION).where('selectedDate', '==', dateStr);
+    const snap = await q.get();
+
+    const taken = new Set();
+    snap.forEach(doc => {
+        const d = doc.data();
+        if ((d.status || '').toLowerCase() === 'cancelled') return;
+        const t = normalizeTo12Hour(d.selectedTime || d.time || d.appointmentTime || d.formattedTime);
+        if (t) taken.add(t);
+    });
+
+    const docRef = db.collection(AVAILABILITY_COLLECTION).doc(dateStr);
+    const payload = {
+        takenTimes: Array.from(taken),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    if (tx) {
+        tx.set(docRef, payload, { merge: true });
+    } else {
+        await docRef.set(payload, { merge: true });
+    }
+}
+
+exports.availabilityMirror = onDocumentWritten(
+    `${BOOKINGS_COLLECTION}/{bookingId}`,
+    async (event) => {
+        try {
+            const before = event.data.before.exists ? event.data.before.data() : null;
+            const after = event.data.after.exists ? event.data.after.data() : null;
+
+            const datesToUpdate = new Set();
+            if (before?.selectedDate) datesToUpdate.add(before.selectedDate);
+            if (after?.selectedDate) datesToUpdate.add(after.selectedDate);
+
+            const batchDates = Array.from(datesToUpdate);
+            await Promise.all(batchDates.map(dateStr => recomputeAvailabilityForDate(dateStr)));
+
+            logger.info('Availability updated for dates:', batchDates);
+        } catch (err) {
+            logger.error('availabilityMirror failed:', err);
+        }
+    }
+);
+
+// Sync availability from Google Calendar events into the availability mirror
+exports.syncAvailabilityFromCalendar = onRequest({
+    cors: true,
+    secrets: [calendarCredentials],
+    timeoutSeconds: 60
+}, async (request, response) => {
+    try {
+        const calendar = await getCalendarClient();
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+
+        const eventsResponse = await calendar.events.list({
+            calendarId: DEFAULT_CALENDAR_ID,
+            timeMin: start.toISOString(),
+            timeMax: end.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults: 2500
+        });
+
+        const events = eventsResponse.data.items || [];
+        // Build date -> takenTimes set from events
+        const dateToTimes = new Map();
+        for (const ev of events) {
+            const startStr = ev.start?.dateTime || ev.start?.date;
+            if (!startStr) continue;
+            const d = new Date(startStr);
+            if (Number.isNaN(d.getTime())) continue;
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const dateKey = `${y}-${m}-${day}`;
+            const hours = d.getHours();
+            const period = hours >= 12 ? 'PM' : 'AM';
+            const h12 = (hours % 12) || 12;
+            const time12 = `${h12}:00 ${period}`;
+            if (!dateToTimes.has(dateKey)) dateToTimes.set(dateKey, new Set());
+            dateToTimes.get(dateKey).add(time12);
+        }
+
+        // Merge with current bookings for the same window
+        const db = admin.firestore();
+        const q = db.collection(BOOKINGS_COLLECTION)
+            .where('selectedDate', '>=', `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`)
+            .where('selectedDate', '<=', `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-31`);
+        const snap = await q.get();
+        snap.forEach(doc => {
+            const b = doc.data();
+            if ((b.status || '').toLowerCase() === 'cancelled') return;
+            const dateKey = b.selectedDate;
+            const t = normalizeTo12Hour(b.selectedTime || b.time || b.appointmentTime || b.formattedTime);
+            if (!dateKey || !t) return;
+            if (!dateToTimes.has(dateKey)) dateToTimes.set(dateKey, new Set());
+            dateToTimes.get(dateKey).add(t);
+        });
+
+        // Write availability docs
+        const writes = [];
+        for (const [dateKey, set] of dateToTimes.entries()) {
+            const docRef = db.collection(AVAILABILITY_COLLECTION).doc(dateKey);
+            writes.push(docRef.set({
+                takenTimes: Array.from(set),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true }));
+        }
+        await Promise.all(writes);
+
+        response.status(200).json({ success: true, updatedDates: Array.from(dateToTimes.keys()) });
+    } catch (err) {
+        logger.error('syncAvailabilityFromCalendar failed:', err);
+        response.status(500).json({ success: false, message: err.message || 'Failed to sync availability' });
     }
 });
 

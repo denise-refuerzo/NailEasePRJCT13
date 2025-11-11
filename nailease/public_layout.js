@@ -122,6 +122,7 @@ const renderTopPicks = (items) => {
 };
 
 export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
+    const GOOGLE_CALENDAR_EMBED_URL = typeof window !== 'undefined' ? window.__NAILEASE_CALENDAR_EMBED_URL__ : '';
     const customStyle = `
         <style>
             /* Custom Scrollbar and Text Shadow styles remain the same */
@@ -163,6 +164,29 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
                 </div>
                 
                 ${renderTopPicks(topPicks)}
+
+                <section class="mt-10">
+                    <h2 class="text-2xl font-extrabold text-pink-600 mb-4 tracking-wider">Calendar</h2>
+                    <p class="text-sm text-gray-600 mb-4">See available and not available dates and times. Updated in real time with admin and user bookings.</p>
+                    <div id="public-availability-calendar" class="bg-white rounded-2xl shadow-md border border-gray-100 p-4"></div>
+                </section>
+                
+                ${GOOGLE_CALENDAR_EMBED_URL ? `
+                <section class="mt-8">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Admin Calendar (Read‑only)</h3>
+                    <p class="text-xs text-gray-500 mb-3">Reflects the admin’s Google Calendar. For privacy, only availability is used in the booking view.</p>
+                    <div class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                        <iframe
+                            src="${GOOGLE_CALENDAR_EMBED_URL}"
+                            class="w-full h-[540px] border-0"
+                            frameborder="0"
+                            scrolling="no"
+                            loading="lazy"
+                            allowfullscreen
+                        ></iframe>
+                    </div>
+                </section>
+                ` : ''}
             </main>
 
             <footer class="text-center py-6 text-gray-500 text-sm border-t border-pink-100 mt-12">
@@ -173,6 +197,18 @@ export const renderPublicPage = ({ activePromos, credentials, topPicks }) => {
 };
 
 export const attachPublicPageListeners = () => {
+    // Initialize availability calendar after DOM is in place
+    (async () => {
+        try {
+            const module = await import('./public_availability_calendar.js');
+            const container = document.getElementById('public-availability-calendar');
+            if (container && typeof module.renderPublicAvailabilityCalendar === 'function') {
+                module.renderPublicAvailabilityCalendar(container);
+            }
+        } catch (e) {
+            console.error('Failed to load availability calendar:', e);
+        }
+    })();
         const setupCarousel = (id, cardWidth = 216) => { 
         const track = document.getElementById(`${id}-track`);
         const nextButton = document.getElementById(`${id}-next`);

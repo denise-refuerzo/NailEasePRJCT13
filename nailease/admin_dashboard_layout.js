@@ -1,5 +1,5 @@
 import { updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline 
+import { saveDesign, deleteDesign, saveGalleryItem, deleteGalleryItem, toggleActivePromo,state, setPage, setTab, editDesign, toggleFeaturedDesign, updateDesignInline, saveQRCode, deleteQRCode 
 } from './auth-logic.js';
 
 //pagination per page
@@ -38,13 +38,111 @@ const APPOINTMENT_STATUS_META = {
     // }
 };
 
+// Blocked days functionality for walk-in form
+const APP_ID_BLOCKED = 'nailease25-iapt';
+const BLOCKED_DAYS_COLLECTION = `artifacts/${APP_ID_BLOCKED}/blockedDays`;
+let blockedDaysCacheAdmin = new Set();
+
+/**
+ * Check if a date is blocked (for admin walk-in form)
+ */
+async function isDayBlockedAdmin(dateString) {
+    if (!dateString) return false;
+    
+    // Check cache first
+    if (blockedDaysCacheAdmin.has(dateString)) {
+        return true;
+    }
+    
+    try {
+        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        let app;
+        try {
+            app = getApp();
+        } catch (e) {
+            app = initializeApp(firebaseConfig);
+        }
+        
+        const db = getFirestore(app);
+        const blockedDayRef = doc(db, BLOCKED_DAYS_COLLECTION, dateString);
+        const blockedDaySnap = await getDoc(blockedDayRef);
+        
+        if (blockedDaySnap.exists()) {
+            const data = blockedDaySnap.data();
+            if (data.blocked === true) {
+                blockedDaysCacheAdmin.add(dateString);
+                return true;
+            }
+        }
+    } catch (error) {
+        console.error('Error checking blocked day:', error);
+    }
+    
+    return false;
+}
+
+/**
+ * Initialize blocked days cache for admin
+ */
+async function initializeBlockedDaysCacheAdmin() {
+    try {
+        const { getFirestore, collection, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getApp, initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyACN3A8xm9pz3bryH6xGhDAF6TCwUoGUp4",
+            authDomain: "nailease25.firebaseapp.com",
+            projectId: "nailease25",
+            storageBucket: "nailease25.firebasestorage.app",
+            messagingSenderId: "706150189317",
+            appId: "1:706150189317:web:82986edbd97f545282cf6c",
+            measurementId: "G-RE42B3FVRJ"
+        };
+        
+        let app;
+        try {
+            app = getApp();
+        } catch (e) {
+            app = initializeApp(firebaseConfig);
+        }
+        
+        const db = getFirestore(app);
+        const blockedDaysRef = collection(db, BLOCKED_DAYS_COLLECTION);
+        const snapshot = await getDocs(blockedDaysRef);
+        
+        blockedDaysCacheAdmin.clear();
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.blocked === true) {
+                blockedDaysCacheAdmin.add(doc.id);
+            } else if (data.date && data.blocked === true) {
+                blockedDaysCacheAdmin.add(data.date);
+            }
+        });
+    } catch (error) {
+        console.error('Error initializing blocked days cache:', error);
+    }
+}
+
 const formatDate = (value) => {
     if (!value) return 'No date set';
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
-
+//
 const formatTime = (value) => {
     if (!value) return 'No time set';
 
@@ -59,6 +157,11 @@ const formatTime = (value) => {
     }
 
     if (typeof value === 'string') {
+        // If already in 12-hour format with consistent spacing, return as is
+        if (value.includes('AM') || value.includes('PM')) {
+            return value.replace(/\s+/g, ' ').trim(); // Normalize spacing
+        }
+
         const parsedTimestamp = Date.parse(value);
         if (!Number.isNaN(parsedTimestamp) && value.includes('T')) {
             const date = new Date(parsedTimestamp);
@@ -70,6 +173,7 @@ const formatTime = (value) => {
         }
 
         try {
+            // Handle 24-hour format (08:00) and convert to 12-hour format (8:00 AM)
             const [hourStr, minuteStr] = value.split(':');
             const minute = parseInt(minuteStr || '0', 10);
             const hour = parseInt(hourStr, 10);
@@ -91,7 +195,7 @@ const formatTime = (value) => {
 
     return value;
 };
-
+//
 //input skeleton
 const inputField = (id, label, type = 'text', value = '', required = true) => {
     // Special handling for time input to show only hours and auto-set minutes to "00"
@@ -114,59 +218,193 @@ const inputField = (id, label, type = 'text', value = '', required = true) => {
     `;
 };
 
-// Time formatting function - ensures minutes are always "00" and shows only hours in picker
+// Time formatting function - ensures only allowed time slots are used
 window.formatHourlyTime = function(input) {
     if (input.type === 'time' && input.value) {
         const [hours, minutes] = input.value.split(':');
-        // Force minutes to be "00" and update the input value
-        input.value = `${hours}:00`;
+        const timeValue = `${hours}:${minutes || '00'}`;
+        
+        // Define allowed time slots
+        const allowedTimeSlots = ['08:00', '10:00', '13:00', '15:00', '17:00', '19:00'];
+        
+        // If the selected time is not in allowed slots, clear it
+        if (!allowedTimeSlots.includes(timeValue)) {
+            input.value = '';
+            alert('Please select one of the available time slots: 8:00 AM, 10:00 AM, 1:00 PM, 3:00 PM, 5:00 PM, or 7:00 PM');
+        }
     }
 };
 
-// Initialize time inputs to show only hours
+// Initialize time inputs to enforce strict time slots
 window.initializeTimeInputs = function() {
     document.querySelectorAll('input[type="time"]').forEach(input => {
         // Set step to 1 hour to show only hour options
         input.step = 3600;
         
-        // Ensure current value has ":00" minutes
-        if (input.value && !input.value.endsWith(':00')) {
-            const [hours] = input.value.split(':');
-            input.value = `${hours}:00`;
+        // Ensure current value is one of the allowed slots
+        if (input.value) {
+            const [hours, minutes] = input.value.split(':');
+            const timeValue = `${hours}:${minutes || '00'}`;
+            const allowedTimeSlots = ['08:00', '10:00', '13:00', '15:00', '17:00', '19:00'];
+            
+            if (!allowedTimeSlots.includes(timeValue)) {
+                input.value = '';
+            }
         }
         
-        // Add event listener to enforce format on change
+        // Add event listener to enforce allowed time slots
         input.addEventListener('change', function() {
             window.formatHourlyTime(this);
         });
     });
 };
 
-// Custom time input that only shows hours
-window.createHourlyTimeInput = function(id, value = '') {
+// Get time slots based on day of week - SAME LOGIC AS USER BOOKING SYSTEM
+function getTimeSlotsForDateAdmin(dateString) {
+    if (!dateString) {
+        // Default to weekday slots
+        return ['08:00', '12:00', '16:00', '18:00', '20:00'];
+    }
+    
+    // Parse date string (format: YYYY-MM-DD) to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    // Monday-Friday (1-5): 8:00 AM, 12:00 PM, 4:00 PM, 6:00 PM, 8:00 PM
+    // Saturday-Sunday (0, 6): 8:00 AM, 10:00 AM, 1:00 PM, 3:00 PM, 5:00 PM, 7:00 PM
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        // Weekdays (Mon-Fri) - 24-hour format
+        return ['08:00', '12:00', '16:00', '18:00', '20:00'];
+    } else {
+        // Weekends (Sat-Sun) - 24-hour format
+        return ['08:00', '10:00', '13:00', '15:00', '17:00', '19:00'];
+    }
+}
+
+// Custom time input that only shows specific time slots based on weekday/weekend
+window.createHourlyTimeInput = function(id, value = '', selectedDate = '') {
+    // Get time slots based on selected date (weekday vs weekend)
+    const allowedTimeSlots = getTimeSlotsForDateAdmin(selectedDate);
+    
     // Extract hour from value if provided
     let hourValue = '';
     if (value) {
-        const [hours] = value.split(':');
-        hourValue = hours;
+        const [hours, minutes] = value.split(':');
+        hourValue = `${hours}:${minutes || '00'}`;
     }
+    
+    const now = new Date();
+    const selectedDateTime = selectedDate ? new Date(selectedDate) : null;
+    const isToday = selectedDateTime && selectedDateTime.toDateString() === now.toDateString();
     
     return `
         <select id="${id}" name="${id}" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-accent-pink focus:ring focus:ring-accent-pink focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
             <option value="">Select Time</option>
-            ${Array.from({length: 12}, (_, i) => {
-                const hour = i + 8; // 8 AM to 7 PM
-                const displayHour = hour > 12 ? hour - 12 : hour;
+            ${allowedTimeSlots.map(timeValue => {
+                const [hours, minutes] = timeValue.split(':');
+                const hour = parseInt(hours, 10);
+                const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
                 const ampm = hour >= 12 ? 'PM' : 'AM';
-                const timeValue = `${hour.toString().padStart(2, '0')}:00`;
-                const isSelected = hourValue === hour.toString().padStart(2, '0');
-                return `<option value="${timeValue}" ${isSelected ? 'selected' : ''}>${displayHour}:00 ${ampm}</option>`;
+                const isSelected = hourValue === timeValue;
+                
+                // Check if this time slot is in the past
+                let isDisabled = false;
+                if (isToday) {
+                    const timeSlot = new Date();
+                    timeSlot.setHours(hour, 0, 0, 0);
+                    isDisabled = timeSlot <= now;
+                }
+                
+                return `<option value="${timeValue}" ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}>${displayHour}:00 ${ampm}${isDisabled ? ' (Past)' : ''}</option>`;
             }).join('')}
         </select>
     `;
 };
 
-//Admin Profile Editing Modal
+// Function to update time options based on selected date - uses weekday/weekend logic
+window.updateTimeOptions = async function(selectedDate) {
+    const timeSelect = document.getElementById('selectedTime');
+    const dateInput = document.getElementById('selectedDate');
+    if (!timeSelect || !dateInput) return;
+    
+    // Check if date is blocked
+    const dayIsBlocked = await isDayBlockedAdmin(selectedDate);
+    
+    if (dayIsBlocked) {
+        // Clear time options and show blocked message
+        timeSelect.innerHTML = '<option value="">Day is Blocked - No Time Slots Available</option>';
+        timeSelect.disabled = true;
+        timeSelect.classList.add('bg-red-50', 'border-red-300');
+        
+        // Show error message
+        let errorMsg = document.getElementById('blockedDateError');
+        if (!errorMsg) {
+            errorMsg = document.createElement('div');
+            errorMsg.id = 'blockedDateError';
+            errorMsg.className = 'mt-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm';
+            dateInput.parentElement.appendChild(errorMsg);
+        }
+        errorMsg.textContent = '⚠️ This day is blocked. Please select a different date.';
+        errorMsg.style.display = 'block';
+        
+        // Highlight the date input
+        dateInput.classList.add('border-red-500', 'bg-red-50');
+        
+        return;
+    } else {
+        // Remove error message and styling if date is not blocked
+        const errorMsg = document.getElementById('blockedDateError');
+        if (errorMsg) {
+            errorMsg.style.display = 'none';
+        }
+        dateInput.classList.remove('border-red-500', 'bg-red-50');
+        timeSelect.classList.remove('bg-red-50', 'border-red-300');
+        timeSelect.disabled = false;
+    }
+    
+    // Get time slots based on weekday/weekend - SAME LOGIC AS USER BOOKING SYSTEM
+    const allowedTimeSlots = getTimeSlotsForDateAdmin(selectedDate);
+    
+    const now = new Date();
+    const selectedDateTime = selectedDate ? new Date(selectedDate) : null;
+    const isToday = selectedDateTime && selectedDateTime.toDateString() === now.toDateString();
+    const currentHour = now.getHours();
+    const currentMinutes = now.getMinutes();
+    
+    // Clear existing options except the first "Select Time" option
+    const firstOption = timeSelect.options[0];
+    timeSelect.innerHTML = '';
+    if (firstOption && firstOption.value === '') {
+        timeSelect.appendChild(firstOption);
+    } else {
+        timeSelect.innerHTML = '<option value="">Select Time</option>';
+    }
+    
+    // Add time slots based on weekday/weekend
+    allowedTimeSlots.forEach(timeValue => {
+        const [hours, minutes] = timeValue.split(':');
+        const hour = parseInt(hours, 10);
+        const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        
+        // Check if this time slot is in the past
+        let isDisabled = false;
+        if (isToday) {
+            if (hour < currentHour || (hour === currentHour && 0 < currentMinutes)) {
+                isDisabled = true;
+            }
+        }
+        
+        const option = document.createElement('option');
+        option.value = timeValue;
+        option.textContent = `${displayHour}:00 ${ampm}${isDisabled ? ' (Past)' : ''}`;
+        option.disabled = isDisabled;
+        timeSelect.appendChild(option);
+    });
+};
+//
+// Admin Profile Editing Modal
 const adminProfileModalHtml = `
     <div id="adminProfileModal" class="fixed inset-0 z-50 items-center justify-center bg-gray-900 bg-opacity-50 hidden">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all duration-300">
@@ -481,6 +719,203 @@ const renderCredentialsTab = () => {
     `;
 };
 
+//QR Code Management Layout (Separate page like Receipts)
+function resolveQRCodeImageUrl(rawUrl = '') {
+    if (!rawUrl) return '';
+
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('data:')) return trimmed;
+
+    // If it's already a direct image URL (jpg, png, gif, webp, svg), return as is
+    if (/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(trimmed)) {
+        return trimmed;
+    }
+
+    // Google Drive folder link - cannot be used as image URL
+    if (trimmed.includes('drive.google.com/drive') && trimmed.includes('/folders/')) {
+        // This is a folder link, not a file link - return empty to show error
+        return '';
+    }
+
+    // Google Drive file link formats:
+    // 1. https://drive.google.com/file/d/<ID>/view?usp=sharing
+    // 2. https://drive.google.com/open?id=<ID>
+    // 3. https://drive.google.com/uc?id=<ID>
+    // 4. https://drive.google.com/file/d/<ID>/view
+    // 5. https://drive.google.com/file/d/<ID>
+    
+    // Extract file ID from various Google Drive link formats
+    let fileId = null;
+    
+    // Format 1 & 4: /file/d/<ID>/
+    const fileDMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+    if (fileDMatch && fileDMatch[1]) {
+        fileId = fileDMatch[1];
+    }
+    
+    // Format 2: /open?id=<ID>
+    if (!fileId) {
+        const openMatch = trimmed.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i);
+        if (openMatch && openMatch[1]) {
+            fileId = openMatch[1];
+        }
+    }
+    
+    // Format 3: /uc?id=<ID>
+    if (!fileId) {
+        const ucMatch = trimmed.match(/drive\.google\.com\/uc\?id=([a-zA-Z0-9_-]+)/i);
+        if (ucMatch && ucMatch[1]) {
+            fileId = ucMatch[1];
+        }
+    }
+    
+    // If we found a file ID, convert to direct view URL
+    if (fileId) {
+        return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+
+    // If it's already a uc?export=view link, return as is
+    if (trimmed.includes('drive.google.com/uc?export=view')) {
+        return trimmed;
+    }
+
+    // Dropbox shared link: https://www.dropbox.com/s/<ID>/filename?dl=0
+    if (/dropbox\.com\/s\//i.test(trimmed)) {
+        return trimmed
+            .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+            .replace('?dl=0', '')
+            .replace('?dl=1', '')
+            .replace('/s/', '/s/');
+    }
+
+    // Imgur links
+    if (trimmed.includes('imgur.com')) {
+        // Convert imgur.com/xxx to i.imgur.com/xxx.jpg
+        const imgurMatch = trimmed.match(/imgur\.com\/([a-zA-Z0-9]+)/i);
+        if (imgurMatch && imgurMatch[1]) {
+            return `https://i.imgur.com/${imgurMatch[1]}.jpg`;
+        }
+    }
+
+    // Google user content URLs (should work as-is)
+    if (trimmed.includes('googleusercontent.com')) {
+        try {
+            const urlObj = new URL(trimmed);
+            return urlObj.toString();
+        } catch (e) {
+            return trimmed;
+        }
+    }
+
+    // Try to validate URL format
+    try {
+        new URL(trimmed);
+        return trimmed;
+    } catch (e) {
+        // Invalid URL format
+        return '';
+    }
+}
+
+export function renderQRLayout(container, user, state) {
+    // QR Code Form
+    const formHtml = `
+        <form id="qr-form" class="p-6 bg-white rounded-xl shadow-md mb-8 border border-gray-100">
+            <h3 class="text-xl font-bold text-pink-600 mb-4">Add New QR Code</h3>
+            <input type="hidden" id="qr-id" value="">
+            
+            ${inputField('qr-name', 'QR Code Name (e.g., GCash, PayMaya)', 'text', '', true)}
+            
+            <div class="mb-4">
+                <label for="qr-imageFile" class="block text-sm font-medium text-gray-700 mb-1">Upload QR Image</label>
+                <input id="qr-imageFile" type="file" accept="image/*" class="w-full border border-gray-300 rounded-lg p-2 bg-white">
+                <p class="text-xs text-gray-500 mt-1">PNG/JPG/WebP. Max 5 MB.</p>
+            </div>
+            
+            <div class="mb-4 flex items-center gap-3">
+                <input id="qr-active" type="checkbox" class="h-4 w-4 text-pink-600 border-gray-300 rounded" checked>
+                <label for="qr-active" class="text-sm text-gray-700">Active</label>
+            </div>
+            
+            <div class="flex space-x-4 mt-6">
+                <button type="submit" class="flex-1 flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-pink-600 hover:bg-pink-700 transition duration-150">
+                    Add QR Code
+                </button>
+            </div>
+        </form>
+    `;
+
+    // QR Code Display
+    const listHtml = state.qrCodes.length > 0 ? state.qrCodes.map(qr => {
+        const imageSrc = qr.imageDataUrl || resolveQRCodeImageUrl(qr.imageUrl || qr.originalUrl || '');
+        const fallbackImage = 'https://placehold.co/200x200/FCE7F3/DB2777?text=No+QR';
+        const errorImage = 'https://placehold.co/200x200/FCE7F3/DB2777?text=Error+Loading';
+        
+        return `
+        <div class="bg-white rounded-xl shadow-sm flex flex-col items-center p-6 mb-4 border border-gray-100 border-l-4 border-pink-500">
+            <div class="w-full mb-4">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-lg font-bold text-gray-800 mb-2">${qr.name || 'Unnamed QR Code'}</h4>
+                    <span class="px-2 py-0.5 text-xs rounded-full ${qr.active === false ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'}">
+                        ${qr.active === false ? 'Inactive' : 'Active'}
+                    </span>
+                </div>
+            </div>
+            <div class="relative w-48 h-48 mb-4">
+                <img src="${imageSrc || fallbackImage}" 
+                    alt="${qr.name || 'QR Code'}" 
+                    onerror="this.onerror=null;this.src='${errorImage}';this.classList.add('opacity-50');"
+                    onload="this.classList.remove('opacity-50');"
+                    crossorigin="anonymous"
+                    referrerpolicy="no-referrer"
+                    class="w-full h-full object-contain rounded-lg shadow-md border border-gray-200 bg-white p-2 transition-opacity"
+                    loading="lazy">
+                ${!imageSrc ? '<div class="absolute inset-0 flex items-center justify-center text-red-500 text-xs font-semibold">Invalid URL</div>' : ''}
+            </div>
+            <div class="flex flex-wrap gap-2 w-full justify-center">
+                <button onclick="window.toggleQRCodeActive('${qr.id}', ${qr.active === false ? 'true' : 'false'})" class="px-4 py-2 text-sm font-medium rounded-lg ${qr.active === false ? 'text-green-600 border border-green-600 hover:bg-green-50' : 'text-yellow-600 border border-yellow-600 hover:bg-yellow-50'} transition">
+                    ${qr.active === false ? 'Activate' : 'Deactivate'}
+                </button>
+                <button onclick="window.deleteQRCode('${qr.id}')" class="px-4 py-2 text-sm font-medium rounded-lg text-red-500 border border-red-500 hover:bg-red-50 transition">
+                    Delete
+                </button>
+            </div>
+        </div>
+    `;
+    }).join('') : '<p class="text-center text-gray-500 py-8">No QR codes added yet. Use the form above to add one!</p>';
+
+    const qrHtml = `
+        <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
+            <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
+                <div class="flex items-center space-x-4">
+                    <button class="flex items-center text-pink-600 hover:text-pink-700 transition" data-navigate-dashboard>
+                        <i data-lucide="arrow-left" class="w-6 h-6 mr-2"></i>
+                        <span class="text-lg font-bold">Back to Dashboard</span>
+                    </button>
+                    <h1 class="text-2xl font-extrabold text-gray-800">QR Code Management</h1>
+                </div>
+                <div class="flex gap-4">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-pink-600">${state.qrCodes.length}</p>
+                        <p class="text-xs font-medium text-gray-500">Total QR Codes</p>
+                    </div>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-1">${formHtml}</div>
+                <div class="lg:col-span-2">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Current QR Codes (${state.qrCodes.length})</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${listHtml}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = qrHtml;
+}
+
 /**
  * Renders the Content Management view.
  * @param {firebase.User} user - The authenticated user object.
@@ -665,7 +1100,7 @@ export function renderAppointmentsLayout(container, user, state) {
         </div>
     `;
 
-// Updated Walk-in Form with consistent layout for all fields
+// Updated Walk-in Form with strict time slot validation
 const walkInFormHtml = `
 <form id="walkInForm" class="space-y-4 bg-white border border-gray-100 p-6 rounded-xl shadow-sm">
     <div>
@@ -701,12 +1136,13 @@ const walkInFormHtml = `
         <div>
             <label for="selectedDate" class="block text-sm font-medium text-gray-700">Appointment Date</label>
             <input type="date" id="selectedDate" name="selectedDate" required
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white">
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:border-pink-500 focus:ring focus:ring-pink-500 focus:ring-opacity-50 transition duration-150 ease-in-out bg-white"
+                onchange="window.updateTimeOptions(this.value).catch(err => console.error('Error updating time options:', err))">
         </div>
 
         <div>
             <label for="selectedTime" class="block text-sm font-medium text-gray-700">Appointment Time</label>
-            ${window.createHourlyTimeInput('selectedTime', '')}
+            ${window.createHourlyTimeInput('selectedTime', '', new Date().toISOString().split('T')[0])}
         </div>
 
         <div>
@@ -819,42 +1255,48 @@ const walkInFormHtml = `
             </div>
         `;
     } else if (currentTab === 'calendar') {
-        const calendarEmbedSectionHtml = GOOGLE_CALENDAR_EMBED_URL ? `
-            <section class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
-                <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <div>
-                        <h3 class="text-base font-semibold text-gray-800">Google Calendar</h3>
-                        <p class="text-xs text-gray-500">This is your live calendar. Sign in with the admin Google account to edit.</p>
+        // Import calendar view functions
+        let firestoreCalendarHtml = '';
+        try {
+            // Dynamically import and render Firestore calendar view
+            if (typeof renderAppointmentCalendar === 'function') {
+                // Note: This is handled asynchronously in the initialization code below
+                // For now, show loading state
+                firestoreCalendarHtml = `
+                    <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+                        <div class="text-center py-8">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
+                            <p class="text-gray-600">Loading calendar view...</p>
+                        </div>
                     </div>
-                    <a href="${GOOGLE_CALENDAR_EMBED_URL}" target="_blank" rel="noopener" class="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-pink-200 text-pink-600 hover:bg-pink-50 transition">
-                        <i data-lucide="external-link" class="w-4 h-4"></i>
-                        Open in new tab
-                    </a>
+                `;
+            } else {
+                // Fallback: Load the module
+                firestoreCalendarHtml = `
+                    <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+                        <div class="text-center py-8">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
+                            <p class="text-gray-600">Loading calendar view...</p>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error rendering Firestore calendar:', error);
+            firestoreCalendarHtml = `
+                <div class="bg-white border border-red-200 rounded-xl shadow-sm p-6">
+                    <p class="text-red-600">Error loading calendar view. Please refresh the page.</p>
                 </div>
-                <div class="relative bg-gray-100">
-                    <iframe 
-                        src="${GOOGLE_CALENDAR_EMBED_URL}"
-                        class="w-full h-[640px] border-0"
-                        frameborder="0"
-                        scrolling="no"
-                        loading="lazy"
-                        allowfullscreen
-                    ></iframe>
-                </div>
-            </section>
-        ` : `
-            <section class="bg-white border border-dashed border-pink-200 rounded-xl p-6 text-center shadow-sm">
-                <p class="text-5xl mb-4 opacity-40">🔐</p>
-                <h3 class="text-lg font-semibold text-gray-800">Embed URL Required</h3>
-                <p class="mt-2 text-sm text-gray-500 max-w-lg mx-auto">
-                    Set <code>window.__NAILEASE_CALENDAR_EMBED_URL__</code> to your Google Calendar embed link so the live calendar appears here. In Google Calendar, open settings ▶ Integrate calendar ▶ copy the iframe URL.
-                    If you keep the calendar private, make sure it is shared with the service account and the admin user signed in can edit events.
-                </p>
-            </section>
-        `;
+            `;
+        }
+        
+        // Remove duplicate embedded Google Calendar to avoid showing a second calendar without slot times
+        const calendarEmbedSectionHtml = '';
         mainContentHtml = `
             <div class="space-y-6">
-                ${calendarEmbedSectionHtml}
+                <div id="firestore-calendar-container">
+                    ${firestoreCalendarHtml}
+                </div>
                 <section class="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -942,13 +1384,542 @@ const walkInFormHtml = `
 
     container.innerHTML = appointmentsHtml;
     
+    // Initialize calendar view and real-time listeners if on calendar tab
+    if (currentTab === 'calendar') {
+        // Store appointments globally for time slot modal
+        window.currentAppointments = bookings;
+        
+        // Set up walk-in booking handler
+        window.onBookWalkIn = async function(date, time) {
+            // Import Swal if available, otherwise use prompt
+            if (typeof Swal !== 'undefined') {
+                const { value: formValues } = await Swal.fire({
+                    title: 'Walk-in Appointment',
+                    html: `
+                        <div class="text-left space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Date</label>
+                                <input id="walkInDate" class="swal2-input" value="${date}" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Time</label>
+                                <input id="walkInTime" class="swal2-input" value="${time}" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Client Name *</label>
+                                <input id="walkInName" class="swal2-input" placeholder="Enter client name" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Phone Number *</label>
+                                <input id="walkInPhone" class="swal2-input" placeholder="Enter phone number" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Email (Optional)</label>
+                                <input id="walkInEmail" class="swal2-input" type="email" placeholder="Enter email">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Design/Service</label>
+                                <input id="walkInDesign" class="swal2-input" value="Walk-in Service" placeholder="Service name">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Total Amount (₱)</label>
+                                <input id="walkInAmount" class="swal2-input" type="number" placeholder="0.00" value="0">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Notes (Optional)</label>
+                                <textarea id="walkInNotes" class="swal2-textarea" placeholder="Additional notes"></textarea>
+                            </div>
+                        </div>
+                    `,
+                    focusConfirm: false,
+                    showCancelButton: true,
+                    confirmButtonText: 'Create Walk-in',
+                    confirmButtonColor: '#ec4899',
+                    cancelButtonText: 'Cancel',
+                    preConfirm: () => {
+                        return {
+                            selectedDate: document.getElementById('walkInDate').value,
+                            selectedTime: document.getElementById('walkInTime').value,
+                            clientName: document.getElementById('walkInName').value,
+                            clientPhone: document.getElementById('walkInPhone').value,
+                            clientEmail: document.getElementById('walkInEmail').value || '',
+                            designName: document.getElementById('walkInDesign').value || 'Walk-in Service',
+                            totalAmount: parseFloat(document.getElementById('walkInAmount').value) || 0,
+                            notes: document.getElementById('walkInNotes').value || '',
+                            paymentMethod: 'cash'
+                        };
+                    },
+                    didOpen: () => {
+                        // Make inputs readonly for date/time
+                        document.getElementById('walkInDate').readOnly = true;
+                        document.getElementById('walkInTime').readOnly = true;
+                    }
+                });
+                
+                if (formValues) {
+                    // Import createWalkInBooking function
+                    const { createWalkInBooking } = await import('./auth-logic.js');
+                    await createWalkInBooking(formValues);
+                    
+                    // Refresh appointments after creating walk-in
+                    if (window.refreshAppointments) {
+                        window.refreshAppointments();
+                    }
+                }
+            } else {
+                // Fallback to simple prompt
+                const clientName = prompt('Enter client name:');
+                if (clientName) {
+                    const clientPhone = prompt('Enter phone number:');
+                    if (clientPhone) {
+                        // Redirect to walk-in form with pre-filled data
+                        window.location.href = `#appointments?tab=walk-in&date=${date}&time=${encodeURIComponent(time)}&name=${encodeURIComponent(clientName)}&phone=${encodeURIComponent(clientPhone)}`;
+                    }
+                }
+            }
+        };
+        
+        // Dynamically import and initialize calendar view
+        import('./appointment-calendar-view.js').then(async ({ renderAppointmentCalendar, attachCalendarListeners }) => {
+            const currentMonth = window.currentCalendarMonth || new Date();
+            const calendarContainer = document.getElementById('firestore-calendar-container');
+            
+            if (calendarContainer) {
+                // Initial render (async)
+                const calendarHtml = await renderAppointmentCalendar(bookings, currentMonth);
+                calendarContainer.innerHTML = calendarHtml;
+                
+                // Attach navigation listeners
+                const updateCalendar = async (newMonth) => {
+                    window.currentCalendarMonth = newMonth;
+                    // Refresh appointments before re-rendering
+                    if (state && state.bookings) {
+                        window.currentAppointments = state.bookings;
+                    }
+                    const updatedHtml = await renderAppointmentCalendar(window.currentAppointments || bookings, newMonth);
+                    calendarContainer.innerHTML = updatedHtml;
+                    attachCalendarListeners(updateCalendar);
+                };
+                attachCalendarListeners(updateCalendar);
+                
+                // Set up global refresh function for block/unblock
+                window.refreshCalendarView = async () => {
+                    const currentMonth = window.currentCalendarMonth || new Date();
+                    if (state && state.bookings) {
+                        window.currentAppointments = state.bookings;
+                    }
+                    const updatedHtml = await renderAppointmentCalendar(window.currentAppointments || bookings, currentMonth);
+                    calendarContainer.innerHTML = updatedHtml;
+                    attachCalendarListeners(updateCalendar);
+                };
+            }
+        }).catch(error => {
+            console.error('Error loading calendar view:', error);
+        });
+        
+        // Setup real-time listeners for instant updates
+        import('./realtime-appointments.js').then(({ setupRealtimeAppointments }) => {
+            const refreshCalendarView = async () => {
+                if (currentTab === 'calendar') {
+                    import('./appointment-calendar-view.js').then(async ({ renderAppointmentCalendar, attachCalendarListeners }) => {
+                        const currentMonth = window.currentCalendarMonth || new Date();
+                        const calendarContainer = document.getElementById('firestore-calendar-container');
+                        if (calendarContainer) {
+                            // Get updated appointments
+                            const updatedBookings = window.currentAppointments || bookings;
+                            const updatedHtml = await renderAppointmentCalendar(updatedBookings, currentMonth);
+                            calendarContainer.innerHTML = updatedHtml;
+                            
+                            // Re-attach listeners
+                            const updateCalendar = async (newMonth) => {
+                                window.currentCalendarMonth = newMonth;
+                                if (state && state.bookings) {
+                                    window.currentAppointments = state.bookings;
+                                }
+                                const newHtml = await renderAppointmentCalendar(window.currentAppointments || bookings, newMonth);
+                                calendarContainer.innerHTML = newHtml;
+                                attachCalendarListeners(updateCalendar);
+                            };
+                            attachCalendarListeners(updateCalendar);
+                        }
+                    });
+                }
+            };
+            
+            setupRealtimeAppointments(
+                async (newAppointment) => {
+                    // Appointment added - update appointments list and refresh calendar
+                    if (window.currentAppointments) {
+                        window.currentAppointments.push(newAppointment);
+                    } else {
+                        // Refresh from Firestore if not available
+                        const { getCurrentAppointments } = await import('./realtime-appointments.js');
+                        window.currentAppointments = await getCurrentAppointments();
+                    }
+                    refreshCalendarView();
+                    
+                    // Also refresh the main state if available
+                    if (state && state.bookings) {
+                        state.bookings.push(newAppointment);
+                    }
+                },
+                async (updatedAppointment) => {
+                    // Appointment updated - update in list and refresh calendar
+                    if (window.currentAppointments) {
+                        const index = window.currentAppointments.findIndex(apt => apt.id === updatedAppointment.id);
+                        if (index !== -1) {
+                            window.currentAppointments[index] = updatedAppointment;
+                        }
+                    } else {
+                        // Refresh from Firestore if not available
+                        const { getCurrentAppointments } = await import('./realtime-appointments.js');
+                        window.currentAppointments = await getCurrentAppointments();
+                    }
+                    refreshCalendarView();
+                    
+                    // Also update the main state if available
+                    if (state && state.bookings) {
+                        const index = state.bookings.findIndex(apt => apt.id === updatedAppointment.id);
+                        if (index !== -1) {
+                            state.bookings[index] = updatedAppointment;
+                        }
+                    }
+                },
+                async (removedAppointment) => {
+                    // Appointment removed - remove from list and refresh calendar
+                    if (window.currentAppointments) {
+                        window.currentAppointments = window.currentAppointments.filter(apt => apt.id !== removedAppointment.id);
+                    } else {
+                        // Refresh from Firestore if not available
+                        const { getCurrentAppointments } = await import('./realtime-appointments.js');
+                        window.currentAppointments = await getCurrentAppointments();
+                    }
+                    refreshCalendarView();
+                    
+                    // Also update the main state if available
+                    if (state && state.bookings) {
+                        state.bookings = state.bookings.filter(apt => apt.id !== removedAppointment.id);
+                    }
+                }
+            );
+        }).catch(error => {
+            console.error('Error setting up real-time listeners:', error);
+        });
+    }
+    
     // Initialize time inputs after rendering
     setTimeout(() => {
         if (typeof window.initializeTimeInputs === 'function') {
             window.initializeTimeInputs();
         }
+        // Note: Date initialization is now handled in attachAppointmentsListeners
+        // to include blocked days cache initialization
     }, 100);
 }
+
+export function renderReceiptsLayout(container, user, state) {
+    const bookings = Array.isArray(state.bookings) ? state.bookings : [];
+    
+    // Filter bookings that have receipts (check for receiptUrl, receiptImageUrl, or receiptUploaded)
+    const bookingsWithReceipts = bookings.filter(booking => {
+        return booking.receiptUrl || booking.receiptImageUrl || booking.receiptUploaded === true || booking.receipt;
+    });
+
+    // Sort by creation date (newest first)
+    const sortedReceipts = bookingsWithReceipts.sort((a, b) => {
+        const dateA = a.createdAt || a.appointmentDate || 0;
+        const dateB = b.createdAt || b.appointmentDate || 0;
+        const timeA = dateA instanceof Date ? dateA.getTime() : new Date(dateA).getTime();
+        const timeB = dateB instanceof Date ? dateB.getTime() : new Date(dateB).getTime();
+        return timeB - timeA; // Newest first
+    });
+
+    const stats = {
+        total: sortedReceipts.length,
+        pending: sortedReceipts.filter(b => (b.status || 'pending').toLowerCase() === 'pending').length,
+        confirmed: sortedReceipts.filter(b => (b.status || 'pending').toLowerCase() === 'confirmed').length,
+        completed: sortedReceipts.filter(b => (b.status || 'pending').toLowerCase() === 'completed').length
+    };
+
+    const receiptCardsHtml = sortedReceipts.length > 0 ? sortedReceipts.map(booking => {
+        const currentStatusKey = (booking.status || 'pending').toLowerCase();
+        const statusMeta = APPOINTMENT_STATUS_META[currentStatusKey] || {
+            label: booking.status || 'Unknown',
+            badgeClasses: 'bg-gray-100 text-gray-600 border border-gray-200',
+            dotClasses: 'bg-gray-400'
+        };
+
+        const scheduledDate = booking.appointmentDate || booking.selectedDate;
+        const createdAt = booking.createdAt ? formatDate(booking.createdAt) : '—';
+        const receiptUrl = booking.receiptUrl || booking.receiptImageUrl || booking.receipt || null;
+        const receiptImageUrl = receiptUrl || (booking.receiptUploaded ? 'https://via.placeholder.com/300x200?text=Receipt+Uploaded' : null);
+
+        return `
+            <article class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-5">
+                <header class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-lg font-semibold text-gray-900">${booking.clientName || 'Unnamed Client'}</h3>
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full ${statusMeta.badgeClasses}">
+                                <span class="inline-flex w-2 h-2 rounded-full mr-1 ${statusMeta.dotClasses}"></span>
+                                ${statusMeta.label}
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-500">${booking.clientPhone || 'No contact provided'}</p>
+                        ${booking.clientEmail ? `<p class="text-xs text-gray-400">${booking.clientEmail}</p>` : ''}
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-gray-700">${booking.bookingId || booking.id}</p>
+                        <p class="text-xs text-gray-400">Created ${createdAt}</p>
+                    </div>
+                </header>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-pink-50/60 border border-pink-100 rounded-lg p-3">
+                        <p class="text-xs uppercase font-semibold text-pink-500 tracking-wide">Schedule</p>
+                        <p class="text-base font-semibold text-gray-900">${formatDate(scheduledDate)}</p>
+                        <p class="text-sm text-gray-600">${formatTime(booking.selectedTime)}</p>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                        <p class="text-xs uppercase font-semibold text-gray-400 tracking-wide">Service</p>
+                        <p class="text-base font-semibold text-gray-900">${booking.designName || 'General Service'}</p>
+                        <p class="text-sm text-gray-600">Source: ${(booking.source || 'Online').toUpperCase()}</p>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                        <p class="text-xs uppercase font-semibold text-gray-400 tracking-wide">Payment</p>
+                        <p class="text-base font-semibold text-gray-900">₱${Number(booking.totalAmount || 0).toLocaleString()}</p>
+                        <p class="text-sm text-gray-600">Reserved: ₱${Number(booking.amountPaid || 0).toLocaleString()}</p>
+                    </div>
+                </div>
+
+                ${receiptImageUrl ? `
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-700 mb-3">Payment Receipt</p>
+                        <div class="relative">
+                            <img src="${receiptImageUrl}" 
+                                alt="Receipt for ${booking.clientName || 'Client'}" 
+                                onerror="this.onerror=null;this.src='https://via.placeholder.com/400x300?text=Receipt+Not+Available';"
+                                class="w-full h-auto max-h-96 object-contain rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition"
+                                onclick="window.openReceiptImage('${receiptImageUrl}', '${booking.clientName || 'Client'}')">
+                            <div class="absolute top-2 right-2 bg-white rounded-full p-2 shadow-md">
+                                <i data-lucide="expand" class="w-4 h-4 text-gray-600"></i>
+                            </div>
+                        </div>
+                        <button onclick="window.openReceiptImage('${receiptImageUrl}', '${booking.clientName || 'Client'}')" 
+                                class="mt-3 w-full px-4 py-2 bg-pink-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-pink-700 transition">
+                            View Full Receipt
+                        </button>
+                    </div>
+                ` : `
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p class="text-sm text-yellow-800">⚠️ Receipt image not available. Client may have uploaded but image URL was not saved.</p>
+                    </div>
+                `}
+
+                ${booking.notes ? `<p class="text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-lg p-3">${booking.notes}</p>` : ''}
+
+                <footer class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+                    <form class="flex flex-wrap items-center gap-3 appointment-status-form" data-booking-id="${booking.id}">
+                        <label class="text-sm font-medium text-gray-700" for="status-${booking.id}">Update Status</label>
+                        <select id="status-${booking.id}" name="status" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500">
+                            ${Object.keys(APPOINTMENT_STATUS_META).filter(statusKey => statusKey !== 'completed').map(statusKey => {
+                                const isSelected = statusKey === currentStatusKey;
+                                return `<option value="${statusKey}" ${isSelected ? 'selected' : ''}>${APPOINTMENT_STATUS_META[statusKey].label}</option>`;
+                            }).join('')}
+                        </select>
+                        <button type="submit" class="px-4 py-2 bg-pink-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-pink-700 transition">Save</button>
+                        <button type="button" onclick="window.deleteBooking('${booking.id}')" class="px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-red-600 transition">Delete</button>
+                    </form>
+                    <div class="text-xs text-gray-400">
+                        <span>Booked via ${booking.platform || booking.source || 'unknown source'}</span>
+                    </div>
+                </footer>
+            </article>
+        `;
+    }).join('') : `
+        <div class="text-center py-12 border border-dashed border-pink-200 rounded-2xl bg-pink-50/40">
+            <p class="text-5xl mb-4 opacity-40">🧾</p>
+            <h3 class="text-lg font-semibold text-gray-700">No Receipts Found</h3>
+            <p class="text-sm text-gray-500 mt-2">No receipts have been submitted by clients yet.</p>
+        </div>
+    `;
+
+    const receiptsHtml = `
+        <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
+            <header class="flex flex-wrap items-center justify-between p-4 bg-white rounded-xl shadow-md border border-gray-100">
+                <div class="flex items-center space-x-4">
+                    <button class="flex items-center text-pink-600 hover:text-pink-700 transition" data-navigate-dashboard>
+                        <i data-lucide="arrow-left" class="w-6 h-6 mr-2"></i>
+                        <span class="text-lg font-bold">Back to Dashboard</span>
+                    </button>
+                    <h1 class="text-2xl font-extrabold text-gray-800">Receipts Management</h1>
+                </div>
+                <div class="flex gap-4">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-pink-600">${stats.total}</p>
+                        <p class="text-xs font-medium text-gray-500">Total Receipts</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-amber-500">${stats.pending}</p>
+                        <p class="text-xs font-medium text-gray-500">Pending</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-emerald-500">${stats.confirmed}</p>
+                        <p class="text-xs font-medium text-gray-500">Confirmed</p>
+                    </div>
+                </div>
+            </header>
+
+            <div class="mt-6">
+                <section class="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800">All Receipts (${sortedReceipts.length})</h3>
+                    </div>
+                    <div class="space-y-4">${receiptCardsHtml}</div>
+                </section>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = receiptsHtml;
+}
+
+export function attachReceiptsListeners() {
+    const navigate = typeof window.setPage === 'function' ? window.setPage : null;
+    const updateBookingStatus = typeof window.updateBookingStatus === 'function' ? window.updateBookingStatus : null;
+
+    document.querySelector('[data-navigate-dashboard]')?.addEventListener('click', () => {
+        navigate?.('dashboard');
+    });
+
+    document.querySelectorAll('.appointment-status-form').forEach(form => {
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            const bookingId = form.getAttribute('data-booking-id');
+            const statusSelect = form.querySelector('select[name="status"]');
+            if (bookingId && statusSelect) {
+                updateBookingStatus?.(bookingId, statusSelect.value);
+            }
+        });
+    });
+}
+
+export function attachQRListeners() {
+    const navigate = typeof window.setPage === 'function' ? window.setPage : null;
+
+    document.querySelector('[data-navigate-dashboard]')?.addEventListener('click', () => {
+        navigate?.('dashboard');
+    });
+
+    // QR Form Listener
+    const qrForm = document.getElementById('qr-form');
+    const qrImageFileInput = document.getElementById('qr-imageFile');
+    const activeCheckbox = document.getElementById('qr-active');
+    let selectedImageDataUrl = null;
+    let selectedFilename = null;
+    
+    // Preview on file select
+    if (qrImageFileInput) {
+        qrImageFileInput.addEventListener('change', () => {
+            const file = qrImageFileInput.files && qrImageFileInput.files[0];
+            selectedImageDataUrl = null;
+            selectedFilename = null;
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'File Too Large',
+                    text: 'Please upload an image smaller than 5 MB.'
+                });
+                qrImageFileInput.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                selectedImageDataUrl = e.target.result;
+                selectedFilename = file.name;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    if (qrForm) {
+        qrForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const id = document.getElementById('qr-id').value;
+            const name = document.getElementById('qr-name').value.trim();
+            const active = activeCheckbox ? activeCheckbox.checked : true;
+
+            if (!name) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Missing QR Name',
+                    text: 'Please provide a name for this QR code (e.g., GCash, PayMaya).'
+                });
+                return;
+            }
+
+            if (!selectedImageDataUrl) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Missing Image',
+                    text: 'Please upload a QR image.'
+                });
+                return;
+            }
+
+            if (typeof window.saveQRCode === 'function') {
+                window.saveQRCode(id, { 
+                    name, 
+                    imageDataUrl: selectedImageDataUrl, 
+                    originalFilename: selectedFilename,
+                    active 
+                }).then(() => {
+                    form.reset();
+                    document.getElementById('qr-id').value = '';
+                    selectedImageDataUrl = null;
+                    selectedFilename = null;
+                    if (qrImageFileInput) {
+                        qrImageFileInput.value = '';
+                    }
+                    if (activeCheckbox) {
+                        activeCheckbox.checked = true;
+                    }
+                }).catch(err => {
+                    console.error('QR save failed:', err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Save Failed',
+                        text: err?.message || 'Could not save QR code. Please try again.'
+                    });
+                });
+            }
+        });
+    }
+}
+
+// Global function to open receipt image in modal/lightbox
+window.openReceiptImage = function(imageUrl, clientName) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75';
+    modal.innerHTML = `
+        <div class="relative max-w-4xl max-h-[90vh] p-4">
+            <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition z-10">
+                <i data-lucide="x" class="w-6 h-6 text-gray-700"></i>
+            </button>
+            <img src="${imageUrl}" alt="Receipt for ${clientName}" class="max-w-full max-h-[90vh] object-contain rounded-lg">
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+};
 
 export function attachAppointmentsListeners() {
     const navigate = typeof window.setPage === 'function' ? window.setPage : null;
@@ -992,26 +1963,80 @@ export function attachAppointmentsListeners() {
 
     const walkInForm = document.getElementById('walkInForm');
     if (walkInForm) {
-        walkInForm.addEventListener('submit', event => {
+        walkInForm.addEventListener('submit', async event => {
             event.preventDefault();
             const formData = new FormData(walkInForm);
             const payload = Object.fromEntries(formData.entries());
             
-            // Validate time format to ensure it's on the hour (e.g., 10:00, not 10:20)
-            const timeParts = payload.selectedTime.split(':');
-            if (timeParts.length === 2 && parseInt(timeParts[1], 10) !== 0) {
-                alert('Please select a time that is on the hour (e.g., 10:00, 11:00). Minutes must be "00".');
+            // Check if date is blocked
+            const dayIsBlocked = await isDayBlockedAdmin(payload.selectedDate);
+            if (dayIsBlocked) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Date Blocked',
+                        text: 'This day is blocked and unavailable for booking. Please select a different date.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#ec4899'
+                    });
+                } else {
+                    alert('This day is blocked and unavailable for booking. Please select a different date.');
+                }
+                // Highlight the date input
+                const dateInput = document.getElementById('selectedDate');
+                if (dateInput) {
+                    dateInput.focus();
+                    dateInput.classList.add('border-red-500', 'bg-red-50');
+                }
+                return;
+            }
+            
+            // Validate time is one of the allowed slots for the selected date (weekday/weekend)
+            const allowedTimeSlots = getTimeSlotsForDateAdmin(payload.selectedDate);
+            if (!allowedTimeSlots.includes(payload.selectedTime)) {
+                // Format date to show weekday/weekend info
+                const [year, month, day] = payload.selectedDate.split('-').map(Number);
+                const dateObj = new Date(year, month - 1, day);
+                const dayOfWeek = dateObj.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const timeSlotsText = isWeekend 
+                    ? '8:00 AM, 10:00 AM, 1:00 PM, 3:00 PM, 5:00 PM, 7:00 PM'
+                    : '8:00 AM, 12:00 PM, 4:00 PM, 6:00 PM, 8:00 PM';
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Invalid Time Slot',
+                        text: `Please select one of the available time slots for this date: ${timeSlotsText}`,
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#ec4899'
+                    });
+                } else {
+                    alert(`Please select one of the available time slots for this date: ${timeSlotsText}`);
+                }
                 return;
             }
             
             createWalkInBooking?.(payload);
             walkInForm.reset();
+            // Clear any error messages
+            const errorMsg = document.getElementById('blockedDateError');
+            if (errorMsg) {
+                errorMsg.style.display = 'none';
+            }
         });
     }
 
     document.querySelector('[data-refresh-calendar]')?.addEventListener('click', async () => {
         if (typeof window.refreshCalendarEvents === 'function') {
             await window.refreshCalendarEvents(true);
+        }
+        // Also trigger availability sync from Google Calendar so homepage reflects admin calendar slots
+        try {
+            await fetch('https://us-central1-nailease25.cloudfunctions.net/syncAvailabilityFromCalendar', {
+                method: 'POST'
+            });
+        } catch (e) {
+            console.warn('Availability sync request failed (non-blocking):', e);
         }
     });
 
@@ -1025,9 +2050,21 @@ export function attachAppointmentsListeners() {
     });
     
     // Initialize time inputs when appointments page loads
-    setTimeout(() => {
+    setTimeout(async () => {
+        // Initialize blocked days cache for walk-in form validation
+        await initializeBlockedDaysCacheAdmin();
+        
         if (typeof window.initializeTimeInputs === 'function') {
             window.initializeTimeInputs();
+        }
+        
+        // Set initial date to today and update time options (check for blocked date)
+        const dateInput = document.getElementById('selectedDate');
+        if (dateInput) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+            dateInput.min = today; // Prevent selecting past dates
+            await window.updateTimeOptions(today);
         }
     }, 100);
 }
@@ -1132,6 +2169,24 @@ export function renderAdminLayout(container, user) {
                             <button id="addWalkInBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Add Walk-in</button>
                             <button id="viewCalendarBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Calendar</button>
                             <button id="pendingBookingsBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Pending</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition duration-300">
+                        <div class="flex justify-between items-center mb-4"><div class="flex items-center"><span class="text-2xl mr-2 text-pink-600">🧾</span><h3 class="text-lg font-semibold text-gray-800">Receipts</h3></div><button id="manageReceiptsBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button></div>
+                        <p class="text-sm text-gray-500 mb-4">View and manage all payment receipts submitted by clients during booking.</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="viewAllReceiptsBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">All Receipts</button>
+                            <button id="pendingReceiptsBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Pending Review</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition duration-300">
+                        <div class="flex justify-between items-center mb-4"><div class="flex items-center"><span class="text-2xl mr-2 text-pink-600">📱</span><h3 class="text-lg font-semibold text-gray-800">QR Codes</h3></div><button id="manageQRCodesBtn" class="px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium rounded-lg transition duration-150">Manage</button></div>
+                        <p class="text-sm text-gray-500 mb-4">Manage payment QR codes for different payment methods like GCash, PayMaya, etc.</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="viewQRCodesBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">View All</button>
+                            <button id="addQRCodeBtn" class="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full border border-gray-300">Add QR Code</button>
                         </div>
                     </div>
                 </div>
@@ -1311,6 +2366,7 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
                     form.reset();
                 };
             }
+            
         };
         
         // Export the form attachment function for use after rendering the manage view
@@ -1319,6 +2375,12 @@ export function attachAdminDashboardListeners(logoutUser, user, setPage, updateP
         // Placeholder console logs for other buttons
         document.getElementById('manageReviewBtn')?.addEventListener('click', () => console.log('Review Management Opened'));
         document.getElementById('manageAppointmentsBtn')?.addEventListener('click', () => navigate?.('appointments'));
+        document.getElementById('manageReceiptsBtn')?.addEventListener('click', () => navigate?.('receipts'));
+        document.getElementById('viewAllReceiptsBtn')?.addEventListener('click', () => navigate?.('receipts'));
+        document.getElementById('pendingReceiptsBtn')?.addEventListener('click', () => navigate?.('receipts'));
+        document.getElementById('manageQRCodesBtn')?.addEventListener('click', () => navigate?.('qr'));
+        document.getElementById('viewQRCodesBtn')?.addEventListener('click', () => navigate?.('qr'));
+        document.getElementById('addQRCodeBtn')?.addEventListener('click', () => navigate?.('qr'));
         document.getElementById('addWalkInBtn')?.addEventListener('click', () => {
             if (setAppointmentsTab) {
                 setAppointmentsTab('walk-in');
