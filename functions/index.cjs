@@ -13,6 +13,7 @@ const calendarCredentials = defineSecret('GOOGLE_CALENDAR_CREDENTIALS');
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onRequest } = require("firebase-functions/v2/https");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { logger } = require("firebase-functions");
 
 
@@ -148,6 +149,67 @@ function normalizeTo12Hour(timeStr) {
         return `${h12}:00 ${period}`;
     }
     return s;
+}
+
+async function sendReminderSms(data, reminderType, customMessage = null) {
+    // Note: iprogsmsToken must be defined at the top level
+    const apiToken = iprogsmsToken.value(); 
+    const phoneNumber = data.clientPhone;
+    
+    if (!phoneNumber) return;
+
+    const phoneNumberCleaned = phoneNumber.replace(/\+/g, '').trim(); 
+    const SMS_PROVIDER = 0;
+    const clientName = data.clientName || 'Valued Client';
+    const appointmentTime = data.selectedTime || 'the booked time';
+    const appointmentDate = data.selectedDate || 'the booked date';
+    const designName = data.designName || 'service';
+
+    let message = customMessage || ''; // Use customMessage if provided
+
+    if (reminderType === '24h') {
+        message = `Friendly Reminder: Hi ${clientName}, your Nailease appointment for ${designName} is tomorrow at ${appointmentTime}. Thank you for booking, see you there!`;
+    } else if (reminderType === '2h') {
+        message = `Final Reminder: Hi ${clientName}, your Nailease appointment is TODAY at ${appointmentTime} on ${appointmentDate}. See you soon!`;
+    } 
+    // If it's a 'confirmation' type, 'message' remains 'customMessage', which is the confirmation text.
+
+    if (!message) {
+        logger.warn(`[SMS HELPER] No valid message constructed for type: ${reminderType}`);
+        return;
+    }
+
+    const smsApiBaseUrl = 'https://sms.iprogtech.com/api/v1/sms_messages';
+    
+    const requestBody = {
+        api_token: apiToken,
+        phone_number: phoneNumberCleaned,
+        message: message,
+        sms_provider: SMS_PROVIDER
+    };
+
+    try {
+        const apiResponse = await fetch(smsApiBaseUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const responseText = await apiResponse.text();
+        const apiData = JSON.parse(responseText);
+        let logPrefix = reminderType.toUpperCase();
+        if (logPrefix === 'CONFIRMATION') logPrefix = 'CONFIRM';
+
+        if (apiResponse.status === 200 && (apiData.status === 200 || apiData.status === 'success')) {
+            logger.info(`[${logPrefix} SUCCESS] Sent to ${phoneNumber}. ID: ${apiData.message_id}`);
+        } else {
+            logger.error(`[${logPrefix} FAILED] HTTP Status ${apiResponse.status}. API Error: ${responseText}`);
+            throw new Error(`SMS send failed: ${responseText}`);
+        }
+    } catch (error) {
+        logger.error(`[${reminderType.toUpperCase()} CRITICAL ERROR] Network/Fetch failure:`, error);
+        throw error;
+    }
 }
 
 // NOTE: This recompute logic is now self-contained in exports.availabilityMirror below.
@@ -420,7 +482,7 @@ exports.listCalendarEvents = onRequest({
 });
 
 // index.js - exports.sendConfirmationSms (FINAL, DEBUG-READY VERSION)
-    exports.sendConfirmationSms = onDocumentWritten({
+exports.sendConfirmationSms = onDocumentWritten({
         document: `${BOOKINGS_COLLECTION}/{bookingId}`,
         secrets: [iprogsmsToken]
     }, 
@@ -434,74 +496,252 @@ exports.listCalendarEvents = onRequest({
 
         // Trigger only if status changes to confirmed
         if (oldStatus !== 'confirmed' && newStatus === 'confirmed') {
+            const bookingId = event.params.bookingId;
             const apiToken = iprogsmsToken.value();
             const phoneNumber = after.clientPhone;
+            const db = admin.firestore();
             
-            // 1. Basic Data Validation and Cleaning
+            // 1. Basic Data Validation
             if (!phoneNumber) {
-                logger.warn(`[CONFIRM SMS] Booking ${event.params.bookingId} confirmed but clientPhone missing.`);
+                logger.warn(`[CONFIRM SMS] Booking ${bookingId} confirmed but clientPhone missing.`);
                 return;
             }
 
-            // Clean phone number to 639xxxxxxxxx format
-            const phoneNumberCleaned = phoneNumber.replace(/\+/g, '').trim(); 
-            const SMS_PROVIDER = 0; // Default provider 
-            const clientName = after.clientName || 'Valued Client';
-            const appointmentDate = after.selectedDate || 'the booked date';
-            const appointmentTime = after.selectedTime || 'the booked time';
-            const designName = after.designName || 'service';
-            const totalAmount = after.totalAmount || 0;
-            const remainingBalance = (totalAmount - (totalAmount / 2)).toFixed(2);
+            // --- 2. SETUP FOR ROUTING ---
             
-            const message = 
-                `Hi ${clientName}! Your Nailease appointment for ${designName} on ${appointmentDate} at ${appointmentTime} is CONFIRMED! Remaining balance: PHP ${remainingBalance}. Thank you!`;
-            
+            // Calculate the time difference (ms)
+            const appointmentDateTimeStr = `${after.selectedDate} ${after.selectedTime}`;
+            const appointmentTimeMs = new Date(appointmentDateTimeStr).getTime();
+            const nowMs = Date.now();
+            const timeDifferenceMs = appointmentTimeMs - nowMs;
+
+            const MS_IN_24_HOURS = 24 * 60 * 60 * 1000;
+            const MS_IN_2_HOURS = 2 * 60 * 60 * 1000;
+
+            let updateFields = {}; 
+
             try {
-                const smsApiBaseUrl = 'https://sms.iprogtech.com/api/v1/sms_messages';
+                // A. Send Initial Confirmation Message (using in-line logic for the unique confirmation message)
                 
-                // --- 3. JSON BODY CONSTRUCTION ---
-                const requestBody = {
-                    api_token: apiToken,
-                    phone_number: phoneNumberCleaned,
-                    message: message,
-                    sms_provider: SMS_PROVIDER
-                };
-
-                // --- 4. FETCH CALL (Cleaned up from previous step) ---
-                const apiResponse = await fetch(
-                    smsApiBaseUrl,
-                    {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json' 
-                        },
-                        body: JSON.stringify(requestBody)
-                    }
-                );
-
-                // --- 5. LOGGING FOR DEBUGGING ---
-                const responseStatus = apiResponse.status;
-                const responseText = await apiResponse.text();
-                logger.info(`[SMS DEBUG] API Status: ${responseStatus}, Raw Body: ${responseText}`);
+                const clientName = after.clientName || 'Valued Client';
+                const appointmentDate = after.selectedDate || 'the booked date';
+                const appointmentTime = after.selectedTime || 'the booked time';
+                const designName = after.designName || 'service';
+                const totalAmount = after.totalAmount || 0;
+                const remainingBalance = (totalAmount - (totalAmount / 2)).toFixed(2);
                 
-                if (responseStatus !== 200) {
-                    logger.error(`[SMS FAILED] Received non-200 status code ${responseStatus}. Check API token or phone format.`);
-                    return;
+                const confMessage = 
+                    `Hi ${clientName}! Your Nailease appointment for ${designName} on ${appointmentDate} at ${appointmentTime} is CONFIRMED! Remaining balance: PHP ${remainingBalance}. Thank you!`;
+                
+                // Re-use the sendReminderSms helper logic here (assuming the helper is adapted to handle the confirmation message)
+                await sendReminderSms(after, 'confirmation', confMessage);
+                logger.info(`[CONFIRMATION] Initial Confirmation SMS Sent.`);
+                
+                
+                // B. ROUTING: Check if reminder is due NOW (Last-Minute Bookings)
+                
+                if (timeDifferenceMs < 0) {
+                    logger.warn(`[ROUTER] Booking ${bookingId} is in the past. No timed reminder needed.`);
+                } 
+                else if (timeDifferenceMs <= MS_IN_2_HOURS) {
+                    // 1. Send 2-Hour Reminder Immediately
+                    await sendReminderSms(after, '2h');
+                    updateFields.reminder24hSent = true; // Mark both as sent to skip cron
+                    updateFields.reminder2hSent = true;
+                    logger.info(`[ROUTER] Sent 2H Reminder Immediately.`);
+                } 
+                else if (timeDifferenceMs <= MS_IN_24_HOURS) {
+                    // 2. Send 24-Hour Reminder Immediately
+                    await sendReminderSms(after, '24h');
+                    updateFields.reminder24hSent = true; // Mark as sent to skip cron
+                    logger.info(`[ROUTER] Sent 24H Reminder Immediately.`);
+                } 
+                
+                // C. Update Firestore: Only update if a reminder flag was set
+                if (Object.keys(updateFields).length > 0) {
+                    await db.collection(BOOKINGS_COLLECTION).doc(bookingId).update(updateFields);
                 }
-                
-                // --- 6. Final Status Check ---
-                const apiData = JSON.parse(responseText);
-
-                if (apiData.status === 200) {
-                    logger.info(`[CONFIRM SMS SUCCESS] Sent to ${phoneNumber}. Message ID: ${apiData.message_id}`);
-                } else {
-                    logger.error(`[CONFIRM SMS FAILED] API Returned JSON Status Error:`, apiData);
-                }
-
+    
             } catch (error) {
-                logger.error(`[CONFIRM SMS CRITICAL ERROR] Server/Network Failure for ${event.params.bookingId}:`, error);
+                logger.error(`[CONFIRM SMS CRITICAL ERROR] Error during Confirmation/Routing for ${bookingId}:`, error);
             }
+            
+            return;
         }
         return;
-    }
-);
+    });
+
+exports.send24HourReminder = onSchedule('0 20 * * *', 
+    { secrets: [iprogsmsToken] }, 
+    async (event) => {
+      
+      // NOTE: This runs daily at 8:00 PM (20:00)
+  
+      // Calculate the target date (Tomorrow's date in YYYY-MM-DD format)
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + 1); 
+      
+      // We assume selectedDate in Firestore is stored as a simple string like 'YYYY-MM-DD'
+      const targetDateString = targetDate.toISOString().split('T')[0]; 
+      const db = admin.firestore();
+      const apiToken = iprogsmsToken.value();
+  
+      logger.info(`[24H REMINDER] Starting scan for bookings on ${targetDateString}.`);
+  
+      try {
+          // 1. Query Firestore for confirmed bookings for the target date that haven't been reminded
+          const bookingsRef = db.collection(BOOKINGS_COLLECTION);
+          const snapshot = await bookingsRef
+              .where('status', '==', 'confirmed')
+              .where('selectedDate', '==', targetDateString)
+              .where('reminder24hSent', '==', false) // Flag to prevent duplicates
+              .get();
+  
+          if (snapshot.empty) {
+              logger.info("[24H REMINDER] No eligible confirmed bookings found.");
+              return null;
+          }
+  
+          const promises = [];
+  
+          snapshot.forEach(doc => {
+              const data = doc.data();
+              const bookingId = doc.id;
+              const phoneNumber = data.clientPhone;
+              
+              if (!phoneNumber) {
+                  logger.warn(`[24H REMINDER] Booking ${bookingId} confirmed but clientPhone missing.`);
+                  return;
+              }
+  
+              const phoneNumberCleaned = phoneNumber.replace(/\+/g, '').trim(); 
+              const SMS_PROVIDER = 0;
+              const clientName = data.clientName || 'Valued Client';
+              const appointmentTime = data.selectedTime || 'the booked time';
+              const designName = data.designName || 'service';
+              
+              const message = 
+                  `Friendly Reminder: Hi ${clientName}, your Nailease appointment for ${designName} is tomorrow at ${appointmentTime}. Thank you for booking, see you there!`;
+              
+              const smsApiBaseUrl = 'https://sms.iprogtech.com/api/v1/sms_messages';
+              
+              const requestBody = {
+                  api_token: apiToken,
+                  phone_number: phoneNumberCleaned,
+                  message: message,
+                  sms_provider: SMS_PROVIDER
+              };
+  
+              // 2. Send SMS and Update Flag (in parallel)
+              const sendAndUpdatePromise = (async () => {
+                  try {
+                      const apiResponse = await fetch(
+                          smsApiBaseUrl,
+                          {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(requestBody)
+                          }
+                      );
+  
+                      const responseText = await apiResponse.text();
+                      const apiData = JSON.parse(responseText);
+  
+                      if (apiResponse.status === 200 && (apiData.status === 200 || apiData.status === 'success')) {
+                          logger.info(`[24H REMINDER SUCCESS] Sent to ${phoneNumber}. ID: ${apiData.message_id}`);
+                          
+                          // Critical: Update Firestore flag to prevent repeat sends
+                          await doc.ref.update({
+                              reminder24hSent: true,
+                              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                          });
+                      } else {
+                          logger.error(`[24H REMINDER FAILED] API Error. Status: ${apiResponse.status}, Raw: ${responseText}`);
+                      }
+  
+                  } catch (error) {
+                      logger.error(`[24H REMINDER CRITICAL ERROR] Network/Fetch failure for ${bookingId}:`, error);
+                  }
+              })();
+              
+              promises.push(sendAndUpdatePromise);
+          });
+  
+          await Promise.allSettled(promises);
+          logger.info(`[24H REMINDER] Successfully processed ${snapshot.size} appointments.`);
+          
+      } catch (error) {
+          logger.error("[24H REMINDER] Firestore query failed:", error);
+      }
+      
+      return null;
+});
+
+exports.send2HourReminder = onSchedule('0 10 * * *', // Runs daily at 10:00 AM (e.g., to catch appointments from 10:00 AM to EOD)
+    { secrets: [iprogsmsToken] }, 
+    async (event) => {
+      
+      const targetDate = new Date().toISOString().split('T')[0];
+      const db = admin.firestore();
+      
+      logger.info(`[2H REMINDER] Starting scan for TODAY's bookings (${targetDate}).`);
+      
+      const MS_IN_2_HOURS = 2 * 60 * 60 * 1000; // Use the same const name as the router
+      const currentMs = Date.now();
+
+      try {
+          // 1. Query Firestore for confirmed bookings for TODAY that haven't received the 2-hour reminder
+          const bookingsRef = db.collection(BOOKINGS_COLLECTION);
+          const snapshot = await bookingsRef
+              .where('status', '==', 'confirmed')
+              .where('selectedDate', '==', targetDate) // Filter only today's date
+              .where('reminder2hSent', '==', false) // Filter only unsent reminders
+              .get();
+
+          if (snapshot.empty) {
+              logger.info("[2H REMINDER] No eligible confirmed bookings found.");
+              return null;
+          }
+
+          const promises = [];
+  
+          snapshot.forEach(doc => {
+              const data = doc.data();
+              const bookingId = doc.id;
+              
+              const appointmentDateTimeStr = `${data.selectedDate} ${data.selectedTime}`;
+              const appointmentTimeMs = new Date(appointmentDateTimeStr).getTime();
+              const timeDiff = appointmentTimeMs - currentMs;
+              
+              // 2. CLIENT-SIDE TIME CHECK: Is the appointment exactly 2 hours away (or less)?
+              if (timeDiff > 0 && timeDiff <= TWO_HOURS_IN_ADVANCE) {
+                  
+                  const sendAndUpdatePromise = (async () => {
+                      try {
+                          await sendReminderSms(data, '2h');
+  
+                          // Critical: Update Firestore flag to prevent repeat sends
+                          await doc.ref.update({
+                              reminder2hSent: true,
+                              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                          });
+                      } catch (error) {
+                          logger.error(`[2H REMINDER CRITICAL ERROR] Failure for ${bookingId}:`, error);
+                      }
+                  })();
+                  
+                  promises.push(sendAndUpdatePromise);
+              } else {
+                  logger.info(`[2H REMINDER] Skipping booking ${bookingId}: Not within the 2-hour window.`);
+              }
+          });
+  
+          await Promise.allSettled(promises);
+          logger.info(`[2H REMINDER] Finished processing ${promises.length} potential appointments.`);
+          
+      } catch (error) {
+          logger.error("[2H REMINDER] Firestore query failed:", error);
+      }
+      
+      return null;
+});
