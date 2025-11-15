@@ -151,6 +151,17 @@ const unavailableDates = [
     '2024-12-25', '2024-12-31', '2025-01-01', '2024-12-22', '2024-12-29'
 ];
 
+    const accountBtn = document.getElementById('accountLinkBtn');
+
+    if (accountBtn) { 
+        accountBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = 'index.html'; 
+        });
+    } else {
+        console.error("Account button (#accountLinkBtn) not found!"); 
+    }
+
 function generateCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -842,19 +853,37 @@ function validateCurrentStep() {
     switch (currentStep) {
         case 1:
             if (!bookingData.design || !bookingData.design.name || !bookingData.design.image) {
-                alert('Please choose a design before proceeding.');
+                Swal.fire({
+                    title: 'Design Missing',
+                    text: 'Please choose a design before proceeding.',
+                    icon: 'warning',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#DB2777'
+                });
                 return false;
             }
             return true;
         case 2:
             if (!bookingData.selectedDate) {
-                alert('Please select a date for your appointment.');
+                Swal.fire({
+                    title: 'Date Missing',
+                    text: 'Please select a date for your appointment.',
+                    icon: 'warning',
+                    confirmButtonText: 'Select Date',
+                    confirmButtonColor: '#DB2777'
+                });
                 return false;
             }
             return true;
         case 3:
             if (!bookingData.selectedTime) {
-                alert('Please select a time for your appointment.');
+                Swal.fire({
+                    title: 'Time Missing',
+                    text: 'Please select a time for your appointment.',
+                    icon: 'warning',
+                    confirmButtonText: 'Select Time',
+                    confirmButtonColor: '#DB2777'
+                });
                 return false;
             }
             return true;
@@ -862,7 +891,13 @@ function validateCurrentStep() {
             return validatePersonalInfo();
         case 5:
             if (!bookingData.receiptUploaded) {
-                alert('Please upload your payment receipt to complete the booking.');
+                Swal.fire({
+                    title: 'Payment Required',
+                    text: 'Please upload your payment receipt to complete the booking.',
+                    icon: 'error',
+                    confirmButtonText: 'Upload Receipt',
+                    confirmButtonColor: '#DB2777'
+                });
                 return false;
             }
             return true;
@@ -875,7 +910,6 @@ function validatePersonalInfo() {
     const isDataMissing = !bookingData.personalInfo || !bookingData.personalInfo.fullName || !bookingData.personalInfo.phone || bookingData.personalInfo.fullName === 'Not provided' || bookingData.personalInfo.phone === 'Not provided';
     
     if (isDataMissing) {
-        // If mandatory details are missing, force user into edit mode and validate
         if (document.getElementById('detailsEditView').style.display !== 'none') {
             const fullName = document.getElementById('fullName').value.trim();
             const phoneNumber = document.getElementById('phoneNumber').value.trim();
@@ -893,14 +927,26 @@ function validatePersonalInfo() {
             }
             
             if (!isValid) {
-                alert('Please fill and save your complete details.');
+                Swal.fire({
+                    title: 'Incomplete Details',
+                    text: 'Please fill and save your complete details.',
+                    icon: 'error',
+                    confirmButtonText: 'Fix Details',
+                    confirmButtonColor: '#DB2777'
+                });
                 return false;
             }
             
-            saveDetails(); // Save details to bookingData after validation
+            saveDetails();
         } else {
             showEditView();
-            alert('Please fill in your details to continue.');
+            Swal.fire({
+                title: 'Personal Info Required',
+                text: 'Please fill in your details to continue.',
+                icon: 'info',
+                confirmButtonText: 'Enter Details',
+                confirmButtonColor: '#DB2777'
+            });
             return false;
         }
     }
@@ -910,6 +956,44 @@ function validatePersonalInfo() {
         sendOTP();
         return false; 
     }
+
+    document.getElementById('cancelBtn')?.addEventListener('click', (e) => {
+    e.preventDefault(); // Stop the default action (like form submission or simple navigation)
+    
+    // Check if there are unsaved changes
+    if (changesMade) {
+        Swal.fire({
+            title: 'Unsaved Changes!',
+            text: 'Please save all changes before canceling, or continue without saving?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Save Changes',
+            cancelButtonText: 'Discard & Exit',
+            confirmButtonColor: '#DB2777', // Pink for Save
+            cancelButtonColor: '#CCCCCC', // Grey for Discard
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // User chose to save changes, trigger the save function
+                document.getElementById('saveChangesBtn')?.click(); // Click the Save button
+            } else if (result.dismiss === Swal.DismissReason.cancel) {
+                // User chose to discard changes, proceed with the cancel/exit action
+                window.location.href = 'previous_page.html'; // Adjust this URL as needed
+            }
+        });
+    } else {
+        // No changes, proceed with the cancel/exit action immediately
+        window.location.href = 'previous_page.html'; // Adjust this URL as needed
+    }
+});
+
+    // function handleNextStepClick() {
+    // if (validateCurrentStep()) { 
+    //     // Only executes this block if validation returns true
+    //     currentStep++;
+    //     updateStepUI(); // Function to render the next step
+    // }
+    // }
     
     return bookingData.personalInfo && bookingData.personalInfo.fullName && bookingData.personalInfo.phone && bookingData.otpVerified;
 }
@@ -1402,7 +1486,18 @@ async function completeBooking() {
                 console.log('Receipt uploaded:', receiptUrl);
             } catch (error) {
                 console.error('Failed to upload receipt:', error);
-                alert('Warning: Receipt upload failed, but booking will still be saved. Error: ' + error.message);
+                
+                // --- SWEETALERT2 REPLACEMENT ---
+                Swal.fire({
+                    title: 'Receipt Upload Warning',
+                    html: `
+                        Warning: Receipt upload failed, but booking will still be saved.
+                        <br>
+                        **Error:** ${error.message}
+                    `,
+                    icon: 'warning', // Use the 'warning' icon
+                    confirmButtonText: 'Continue Booking'
+                });
             }
         }
         
@@ -1476,13 +1571,38 @@ async function completeBooking() {
         }
         
         setTimeout(() => {
-            console.log('Booking confirmation sent!');
-            alert('Booking submitted successfully! Your receipt has been uploaded and will be reviewed by our team.');
-        }, 2000);
-    } catch (error) {
-        console.error('Error completing booking:', error);
-        alert('An error occurred while completing your booking. Please try again or contact support.');
-    }
+    console.log('Booking confirmation sent!');
+    
+    // --- SWEETALERT2 SUCCESS MESSAGE WITH REDIRECT ---
+    Swal.fire({
+        title: "Booking Submitted!",
+        text: "Your receipt has been uploaded and will be reviewed by our team.",
+        icon: "success",
+        confirmButtonText: "Got It",
+        confirmButtonColor: '#EC4899' // Pink color
+    }).then((result) => {
+        // --- THIS BLOCK HANDLES THE REDIRECTION ---
+        if (result.isConfirmed) {
+            // Redirect the user to the homepage
+            window.location.href = 'homepage.html'; 
+        }
+        // ---------------------------------------------
+    });
+    // --------------------------------------------------
+
+}, 2000); // The 2000ms delay remains
+} catch (error) {
+    console.error('Error completing booking:', error);
+    
+    // --- SWEETALERT2 ERROR MESSAGE (No change needed here) ---
+    Swal.fire({
+        title: "Booking Failed",
+        text: "An error occurred while completing your booking. Please try again or contact support.",
+        icon: "error",
+        confirmButtonText: "Try Again",
+        confirmButtonColor: '#EF4444' // Red color
+    });
+}
 }
 
 // Download booking details
